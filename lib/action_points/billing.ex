@@ -44,6 +44,52 @@ defmodule ActionPoints.Billing do
   end
 
   @doc """
+  The Pack on sale: `%{credits: ..., price_pence: ..., currency: ...}`.
+  Pricing is config, not code (ADR-0003) — change it freely.
+  """
+  def pack, do: Map.new(Application.fetch_env!(:action_points, :pack))
+
+  @doc """
+  The configured payment-port adapter (`ActionPoints.Billing.PaymentProvider`).
+  """
+  def payment_provider, do: Application.fetch_env!(:action_points, :payment_provider)
+
+  @doc """
+  Grants the Pack's Credits for a completed checkout session — the webhook is
+  the only caller (the redirect back from Checkout is untrusted). Exactly once
+  per session: `provider_ref` is unique in the ledger, so a replayed webhook
+  comes back `:already_granted` and writes nothing.
+
+  Takes a bare `user_id`, not a `Scope`: the caller is Stripe's webhook, where
+  no user session exists — the id was carried through Checkout as the session's
+  `client_reference_id`.
+  """
+  def grant_pack_credits(user_id, provider_ref)
+      when is_integer(user_id) and is_binary(provider_ref) do
+    %CreditTransaction{
+      user_id: user_id,
+      amount: pack().credits,
+      kind: :pack_purchase,
+      provider_ref: provider_ref
+    }
+    |> Ecto.Changeset.change()
+    |> Ecto.Changeset.unique_constraint(:provider_ref,
+      name: :credit_transactions_provider_ref_index
+    )
+    |> Ecto.Changeset.foreign_key_constraint(:user_id)
+    |> Repo.insert()
+    |> case do
+      {:ok, _transaction} ->
+        :granted
+
+      {:error, changeset} ->
+        if Keyword.has_key?(changeset.errors, :provider_ref),
+          do: :already_granted,
+          else: {:error, :unknown_user}
+    end
+  end
+
+  @doc """
   Records the consumption of one Credit by a successful Extraction — the one
   negative ledger entry kind. Meant to run inside the same transaction that
   marks the Extraction successful, so a crash can't charge without delivering

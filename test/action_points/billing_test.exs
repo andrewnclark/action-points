@@ -33,6 +33,42 @@ defmodule ActionPoints.BillingTest do
     end
   end
 
+  describe "grant_pack_credits/2" do
+    test "grants the Pack's 15 Credits keyed to the checkout session" do
+      user = unconfirmed_user_fixture()
+
+      assert Billing.grant_pack_credits(user.id, "cs_1") == :granted
+      assert Billing.balance(Scope.for_user(user)) == 16
+
+      assert [%CreditTransaction{amount: 15, kind: :pack_purchase, provider_ref: "cs_1"}] =
+               Repo.all(
+                 from t in CreditTransaction,
+                   where: t.user_id == ^user.id and t.kind == :pack_purchase
+               )
+    end
+
+    test "a repeated grant for the same checkout session is a no-op" do
+      user = unconfirmed_user_fixture()
+
+      assert Billing.grant_pack_credits(user.id, "cs_1") == :granted
+      assert Billing.grant_pack_credits(user.id, "cs_1") == :already_granted
+      assert Billing.balance(Scope.for_user(user)) == 16
+    end
+
+    test "a second checkout session grants again" do
+      user = unconfirmed_user_fixture()
+
+      assert Billing.grant_pack_credits(user.id, "cs_1") == :granted
+      assert Billing.grant_pack_credits(user.id, "cs_2") == :granted
+      assert Billing.balance(Scope.for_user(user)) == 31
+    end
+
+    test "a grant for an unknown user is refused" do
+      assert Billing.grant_pack_credits(-1, "cs_1") == {:error, :unknown_user}
+      assert Repo.aggregate(CreditTransaction, :count) == 0
+    end
+  end
+
   describe "balance/1" do
     test "is the sum of the user's ledger transactions" do
       user = unconfirmed_user_fixture()

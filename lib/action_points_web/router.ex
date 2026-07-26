@@ -19,10 +19,12 @@ defmodule ActionPointsWeb.Router do
     plug :accepts, ["json"]
   end
 
-  # Other scopes may use custom stacks.
-  # scope "/api", ActionPointsWeb do
-  #   pipe_through :api
-  # end
+  # Signature-verified payment webhooks — no session, no CSRF.
+  scope "/webhooks", ActionPointsWeb do
+    pipe_through :api
+
+    post "/stripe", StripeWebhookController, :create
+  end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development
   if Application.compile_env(:action_points, :dev_routes) do

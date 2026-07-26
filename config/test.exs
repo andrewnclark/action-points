@@ -46,6 +46,9 @@ config :action_points, :extractor, ActionPoints.Meetings.FakeExtractor
 # Replace the Task Sink port with the test fake (test/support/fake_task_sink.ex)
 config :action_points, :task_sink, ActionPoints.Sinks.FakeTaskSink
 
+# Replace the payment port with the test fake (test/support/fake_payment_provider.ex)
+config :action_points, :payment_provider, ActionPoints.Billing.FakePaymentProvider
+
 # Effectively unlimited by default — the rate-limit tests override and reset
 config :action_points, :anon_extraction_rate_limits,
   session: {1_000_000, 3_600_000},
