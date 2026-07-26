@@ -13,6 +13,9 @@ defmodule ActionPoints.Billing.CreditTransaction do
     field :kind, Ecto.Enum, values: [:signup_grant, :pack_purchase, :extraction_consumption]
 
     belongs_to :user, ActionPoints.Accounts.User
+    # Which Extraction a consumption paid for; nil on grants. Unique per
+    # Extraction, so one success can never be charged twice.
+    belongs_to :extraction, ActionPoints.Meetings.Extraction
 
     timestamps(type: :utc_datetime, updated_at: false)
   end

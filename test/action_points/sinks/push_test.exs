@@ -54,7 +54,7 @@ defmodule ActionPoints.Sinks.PushTest do
     Application.put_env(:action_points, :fake_extractor_result, {:ok, action_points})
 
     {:ok, extraction} =
-      Meetings.create_extraction(@session_token, %{"transcript_text" => @transcript})
+      Meetings.create_extraction(nil, @session_token, %{"transcript_text" => @transcript})
 
     Meetings.run_extraction(extraction)
     Meetings.get_extraction!(extraction.id, @session_token)

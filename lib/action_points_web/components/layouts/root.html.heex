@@ -34,16 +34,6 @@
     <ul class="relative z-10 flex w-full items-center justify-end gap-4 px-4 py-3 text-sm sm:px-6 lg:px-8">
       <%= if @current_scope do %>
         <li>
-          <span
-            id="credit-balance"
-            class="inline-flex items-center rounded-full border border-current/30 px-2.5 py-0.5 text-xs font-medium"
-            title="Credits remaining"
-          >
-            {@current_scope.credit_balance}
-            {if @current_scope.credit_balance == 1, do: "Credit", else: "Credits"}
-          </span>
-        </li>
-        <li>
           {@current_scope.user.email}
         </li>
         <li>

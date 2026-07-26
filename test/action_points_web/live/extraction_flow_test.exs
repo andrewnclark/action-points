@@ -1,31 +1,13 @@
 defmodule ActionPointsWeb.ExtractionFlowTest do
   use ActionPointsWeb.ConnCase, async: false
 
+  import ActionPoints.ExtractionHelpers
   import Phoenix.LiveViewTest
 
   @transcript """
   Priya: I'll send the Q3 report to finance by Friday.
   Tom: Great. I'll book the venue for the offsite, no rush on that one.
   """
-
-  defp stub_extractor(result) do
-    Application.put_env(:action_points, :fake_extractor_result, result)
-    on_exit(fn -> Application.delete_env(:action_points, :fake_extractor_result) end)
-  end
-
-  # The Extraction runs in a background task, so the Review screen settles
-  # asynchronously — retry the assertion until it passes or time runs out.
-  defp eventually(fun, tries \\ 100) do
-    fun.()
-  rescue
-    e in [ExUnit.AssertionError] ->
-      if tries == 0 do
-        reraise(e, __STACKTRACE__)
-      else
-        Process.sleep(20)
-        eventually(fun, tries - 1)
-      end
-  end
 
   test "visitor pastes a transcript and sees Action Points on the Review screen", %{conn: conn} do
     stub_extractor(
@@ -222,7 +204,7 @@ defmodule ActionPointsWeb.ExtractionFlowTest do
 
   test "an Extraction is not visible to a different anonymous session", %{conn: conn} do
     {:ok, extraction} =
-      ActionPoints.Meetings.create_extraction("someone-elses-session", %{
+      ActionPoints.Meetings.create_extraction(nil, "someone-elses-session", %{
         "transcript_text" => @transcript
       })
 

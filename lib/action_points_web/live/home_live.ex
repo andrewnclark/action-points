@@ -91,6 +91,7 @@ defmodule ActionPointsWeb.HomeLive do
     {:ok,
      socket
      |> assign(:session_token, session["anon_session_token"])
+     |> assign(:peer_ip, peer_ip(socket))
      |> assign_form(Meetings.change_extraction(%Extraction{}))
      |> allow_upload(:transcript,
        accept: ~w(.txt .vtt .srt),
@@ -112,10 +113,30 @@ defmodule ActionPointsWeb.HomeLive do
     # An uploaded file takes precedence over anything left in the textarea.
     attrs = consume_transcript_upload(socket) || params
 
-    case Meetings.create_extraction(socket.assigns.session_token, attrs) do
+    case Meetings.create_extraction(
+           socket.assigns.current_scope,
+           socket.assigns.session_token,
+           attrs,
+           ip: socket.assigns.peer_ip
+         ) do
       {:ok, extraction} ->
         Meetings.start_extraction(extraction)
         {:noreply, push_navigate(socket, to: ~p"/review/#{extraction}")}
+
+      {:error, :out_of_credits} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "You're out of Credits — a Pack covers your next 15 meetings.")
+         |> push_navigate(to: ~p"/buy")}
+
+      {:error, :rate_limited} ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           "The free preview is rate-limited — try again in a while, " <>
+             "or create a free account for your Free Meeting."
+         )}
 
       {:error, changeset} ->
         {:noreply, assign_form(socket, changeset)}
@@ -144,5 +165,14 @@ defmodule ActionPointsWeb.HomeLive do
 
   defp assign_form(socket, changeset) do
     assign(socket, :form, to_form(changeset))
+  end
+
+  # One half of the anonymous rate-limit key (nil when unavailable, e.g. in
+  # tests without connect info — the session-token half still applies).
+  defp peer_ip(socket) do
+    case get_connect_info(socket, :peer_data) do
+      %{address: address} -> address
+      _unavailable -> nil
+    end
   end
 end

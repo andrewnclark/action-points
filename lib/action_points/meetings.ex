@@ -9,8 +9,12 @@ defmodule ActionPoints.Meetings do
 
   import Ecto.Query
 
+  alias ActionPoints.Accounts.Scope
+  alias ActionPoints.Accounts.User
+  alias ActionPoints.Billing
   alias ActionPoints.Meetings.ActionPoint
   alias ActionPoints.Meetings.Extraction
+  alias ActionPoints.RateLimiter
   alias ActionPoints.Repo
 
   ## Extractions
@@ -23,12 +27,63 @@ defmodule ActionPoints.Meetings do
   end
 
   @doc """
-  Creates a pending Extraction keyed to the anonymous session token.
+  Creates a pending Extraction keyed to the anonymous session token, on behalf
+  of `scope` (nil for an anonymous visitor).
+
+  The gates live here so no create path can skip them: a signed-in user must
+  hold at least one Credit (`{:error, :out_of_credits}` — the caller routes
+  them to the buy page), and anonymous creation is rate-limited per session
+  and per IP (`{:error, :rate_limited}`, IP passed as `opts[:ip]`). Invalid
+  input is reported first, so a fumbled form never burns the rate limit.
   """
-  def create_extraction(session_token, attrs) when is_binary(session_token) do
-    %Extraction{session_token: session_token}
-    |> Extraction.changeset(attrs)
-    |> Repo.insert()
+  def create_extraction(scope, session_token, attrs, opts \\ [])
+      when is_binary(session_token) do
+    changeset =
+      %Extraction{session_token: session_token, user_id: scope_user_id(scope)}
+      |> Extraction.changeset(attrs)
+
+    with true <- changeset.valid?,
+         :ok <- gate_new_extraction(scope, session_token, opts) do
+      Repo.insert(changeset)
+    else
+      false -> {:error, %{changeset | action: :insert}}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp scope_user_id(%Scope{user: %User{id: id}}), do: id
+  defp scope_user_id(nil), do: nil
+
+  defp gate_new_extraction(%Scope{user: %User{}} = scope, _session_token, _opts) do
+    ensure_credit_available(scope)
+  end
+
+  # Checked at attempt time, consumed at success time — two concurrent
+  # successes on a one-Credit balance can briefly overdraw. Accepted for the
+  # MVP: the ledger stays truthful and the next attempt is gated.
+  defp ensure_credit_available(scope) do
+    if Billing.balance(scope) >= 1, do: :ok, else: {:error, :out_of_credits}
+  end
+
+  # The anonymous preview is free, so it is rate-limited instead. Both keys
+  # must allow; the check short-circuits, so a denied session key doesn't
+  # count against the IP.
+  defp gate_new_extraction(nil, session_token, opts) do
+    limits = Application.fetch_env!(:action_points, :anon_extraction_rate_limits)
+
+    keys =
+      [{{:anon_session, session_token}, limits[:session]}] ++
+        case opts[:ip] do
+          nil -> []
+          ip -> [{{:anon_ip, ip}, limits[:ip]}]
+        end
+
+    allowed? =
+      Enum.all?(keys, fn {key, {limit, window_ms}} ->
+        RateLimiter.allow?(key, limit, window_ms)
+      end)
+
+    if allowed?, do: :ok, else: {:error, :rate_limited}
   end
 
   @doc """
@@ -56,30 +111,39 @@ defmodule ActionPoints.Meetings do
   end
 
   @doc """
-  Resets a failed Extraction and runs it again. Failures consume no Credit,
-  so retrying is always free.
+  Resets a failed Extraction and runs it again. The failure itself consumed no
+  Credit, but a retry is a fresh attempt: for a signed-in owner the zero-Credit
+  gate applies just like on create (`{:error, :out_of_credits}`).
 
   The reset is a single conditional UPDATE, so two rapid retries can never
   start two concurrent runs.
   """
-  def retry_extraction(%Extraction{id: id}) do
-    {reset_count, _} =
-      Repo.update_all(
-        from(e in Extraction, where: e.id == ^id and e.status == :failed),
-        set: [
-          status: :pending,
-          failure_reason: nil,
-          updated_at: DateTime.utc_now() |> DateTime.truncate(:second)
-        ]
-      )
+  def retry_extraction(%Extraction{id: id} = extraction) do
+    with :ok <- gate_retry(extraction) do
+      {reset_count, _} =
+        Repo.update_all(
+          from(e in Extraction, where: e.id == ^id and e.status == :failed),
+          set: [
+            status: :pending,
+            failure_reason: nil,
+            updated_at: DateTime.utc_now() |> DateTime.truncate(:second)
+          ]
+        )
 
-    if reset_count == 1 do
-      extraction = Repo.get!(Extraction, id)
-      broadcast(extraction)
-      start_extraction(extraction)
+      if reset_count == 1 do
+        extraction = Repo.get!(Extraction, id)
+        broadcast(extraction)
+        start_extraction(extraction)
+      end
+
+      :ok
     end
+  end
 
-    :ok
+  defp gate_retry(%Extraction{user_id: nil}), do: :ok
+
+  defp gate_retry(%Extraction{user_id: user_id}) do
+    ensure_credit_available(Scope.for_user(%User{id: user_id}))
   end
 
   @doc """
@@ -117,6 +181,13 @@ defmodule ActionPoints.Meetings do
           |> ActionPoint.changeset(attrs)
           |> Repo.insert!()
         end)
+
+        # The Credit is consumed atomically with success — a crash here can't
+        # charge without delivering. Anonymous Extractions have no one to
+        # charge and stay free.
+        if extraction.user_id do
+          Billing.consume_extraction_credit!(extraction.user_id, extraction.id)
+        end
 
         update_status!(extraction, %{status: :succeeded})
       end)

@@ -48,7 +48,7 @@ defmodule ActionPointsWeb.PushTest do
     session_token = Plug.Conn.get_session(conn, :anon_session_token)
 
     {:ok, extraction} =
-      Meetings.create_extraction(session_token, %{"transcript_text" => @transcript})
+      Meetings.create_extraction(nil, session_token, %{"transcript_text" => @transcript})
 
     Meetings.run_extraction(extraction)
     action_points = Meetings.get_extraction!(extraction.id, session_token).action_points

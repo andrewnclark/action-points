@@ -14,6 +14,8 @@ defmodule ActionPoints.Application do
       {Phoenix.PubSub, name: ActionPoints.PubSub},
       # Runs Extractions (and other slow work) outside the request cycle
       {Task.Supervisor, name: ActionPoints.TaskSupervisor},
+      # Keeps the free anonymous preview rate-limited
+      ActionPoints.RateLimiter,
       # Start to serve requests, typically the last entry
       ActionPointsWeb.Endpoint
     ]

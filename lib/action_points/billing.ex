@@ -44,6 +44,22 @@ defmodule ActionPoints.Billing do
   end
 
   @doc """
+  Records the consumption of one Credit by a successful Extraction — the one
+  negative ledger entry kind. Meant to run inside the same transaction that
+  marks the Extraction successful, so a crash can't charge without delivering
+  (nor deliver without charging).
+  """
+  def consume_extraction_credit!(user_id, extraction_id)
+      when is_integer(user_id) and is_integer(extraction_id) do
+    Repo.insert!(%CreditTransaction{
+      user_id: user_id,
+      amount: -1,
+      kind: :extraction_consumption,
+      extraction_id: extraction_id
+    })
+  end
+
+  @doc """
   Loads the Credit balance onto the scope, for display wherever the scope goes.
   """
   def with_balance(nil), do: nil

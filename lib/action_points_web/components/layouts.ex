@@ -41,8 +41,18 @@ defmodule ActionPointsWeb.Layouts do
           ActionPoints
         </.link>
       </div>
-      <div class="flex-none">
-        <%!-- Auth links and the Credit balance live in the root layout's nav --%>
+      <div class="flex-none flex items-center gap-4">
+        <%!-- Auth links live in the root layout's nav; the Credit balance
+        renders here so LiveViews can update it as Credits are consumed --%>
+        <span
+          :if={@current_scope}
+          id="credit-balance"
+          class="inline-flex items-center rounded-full border border-current/30 px-2.5 py-0.5 text-xs font-medium"
+          title="Credits remaining"
+        >
+          {@current_scope.credit_balance}
+          {if @current_scope.credit_balance == 1, do: "Credit", else: "Credits"}
+        </span>
         <.theme_toggle />
       </div>
     </header>

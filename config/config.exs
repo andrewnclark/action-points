@@ -30,6 +30,11 @@ config :action_points, :extractor, ActionPoints.Meetings.Extractor.Claude
 # The Task Sink port: real adapter is Linear; tests swap in a fake
 config :action_points, :task_sink, ActionPoints.Sinks.Linear
 
+# Anonymous landing-preview rate limits, per key: {count, window in ms}
+config :action_points, :anon_extraction_rate_limits,
+  session: {5, 3_600_000},
+  ip: {15, 3_600_000}
+
 # Subtitle types for the Transcript upload — not in the MIME defaults
 config :mime, :types, %{
   "text/vtt" => ["vtt"],
