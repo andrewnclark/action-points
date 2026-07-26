@@ -54,6 +54,10 @@ defmodule ActionPointsWeb.Router do
       # Connecting a Task Sink needs an account (the key is stored against the
       # user) but not sudo mode — the page never renders the key back.
       live "/settings/sink", SinkSettingsLive
+
+      # Buying a Pack needs an account to credit; the zero-Credit gate on the
+      # landing page routes here.
+      live "/buy", BuyPackLive
     end
 
     post "/users/update-password", UserSessionController, :update_password

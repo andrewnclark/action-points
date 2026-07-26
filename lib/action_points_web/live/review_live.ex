@@ -6,6 +6,7 @@ defmodule ActionPointsWeb.ReviewLive do
 
   use ActionPointsWeb, :live_view
 
+  alias ActionPoints.Billing
   alias ActionPoints.Meetings
   alias ActionPoints.Sinks
 
@@ -330,8 +331,16 @@ defmodule ActionPointsWeb.ReviewLive do
   end
 
   def handle_event("retry", _params, socket) do
-    Meetings.retry_extraction(socket.assigns.extraction)
-    {:noreply, assign_extraction(socket, refetch_extraction(socket))}
+    case Meetings.retry_extraction(socket.assigns.extraction) do
+      :ok ->
+        {:noreply, assign_extraction(socket, refetch_extraction(socket))}
+
+      {:error, :out_of_credits} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "You're out of Credits — a Pack covers your next 15 meetings.")
+         |> push_navigate(to: ~p"/buy")}
+    end
   end
 
   @impl true
@@ -386,7 +395,18 @@ defmodule ActionPointsWeb.ReviewLive do
 
   @impl true
   def handle_info({:extraction_updated, _id}, socket) do
-    {:noreply, assign_extraction(socket, refetch_extraction(socket))}
+    # Success just consumed a Credit, so the nav balance must follow.
+    {:noreply,
+     socket
+     |> refresh_credit_balance()
+     |> assign_extraction(refetch_extraction(socket))}
+  end
+
+  defp refresh_credit_balance(socket) do
+    case socket.assigns.current_scope do
+      nil -> socket
+      scope -> assign(socket, :current_scope, Billing.with_balance(scope))
+    end
   end
 
   defp close_editor(socket) do
