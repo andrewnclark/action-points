@@ -13,79 +13,90 @@ defmodule ActionPointsWeb.ReviewLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="mx-auto max-w-2xl">
+    <Layouts.app flash={@flash} current_scope={@current_scope} max_width="max-w-3xl">
+      <div>
         <%= case @extraction.status do %>
           <% status when status in [:pending, :running] -> %>
             <div id="extraction-progress" class="py-24 text-center">
-              <span class="loading loading-dots loading-lg" aria-hidden="true"></span>
-              <h1 class="mt-6 text-2xl font-semibold">Extracting Action Points…</h1>
+              <span class="loading loading-dots loading-lg text-primary" aria-hidden="true"></span>
+              <h1 class="mt-6 text-2xl font-semibold">Extracting Action Points</h1>
               <p class="mt-2 text-base-content/70">
-                Reading your transcript. This can take up to a minute for long meetings.
+                Reading your Transcript. A long meeting can take up to a minute.
               </p>
             </div>
           <% :failed -> %>
             <div id="extraction-failed" class="py-24 text-center">
-              <.icon name="hero-exclamation-triangle" class="size-10 text-error" />
+              <span class="mx-auto grid size-10 place-items-center rounded-box border border-error/40 bg-error/10">
+                <.icon name="hero-exclamation-triangle" class="size-5 text-error" />
+              </span>
               <h1 class="mt-4 text-2xl font-semibold">The Extraction failed</h1>
               <p class="mt-2 text-base-content/70">
-                Nothing was charged. This is usually temporary — try again.
+                No Credit was spent. This is usually temporary — run it again.
               </p>
               <button id="retry-extraction" class="btn btn-primary mt-6" phx-click="retry">
                 Retry Extraction
               </button>
             </div>
+          <% :succeeded when @action_point_count == 0 -> %>
+            <div id="review-empty" class="py-24 text-center">
+              <h1 class="text-2xl font-semibold">No Action Points in this Transcript</h1>
+              <p class="mx-auto mt-2 max-w-md text-base-content/70">
+                The Extraction read the whole thing and found nothing anyone committed to.
+                Some meetings really are just talking.
+              </p>
+              <.link navigate={~p"/"} class="btn btn-primary mt-6">
+                Extract another Transcript
+              </.link>
+              <p :if={@current_scope} class="mt-4 text-xs text-base-content/65">
+                This Extraction succeeded, so it used a Credit.
+              </p>
+            </div>
           <% :succeeded -> %>
-            <div class="flex flex-wrap items-end justify-between gap-4 pt-6 pb-4">
-              <div>
-                <h1 class="text-2xl font-bold">Review your Action Points</h1>
-                <p class="mt-1 text-base-content/70">
-                  {ngettext(
-                    "1 Action Point extracted from your transcript.",
-                    "%{count} Action Points extracted from your transcript.",
-                    @action_point_count
-                  )}
-                </p>
-              </div>
-              <button
-                :if={@pushable_count > 0 or @pushed_action_points == []}
-                id="push-button"
-                class="btn btn-primary"
-                phx-click="push"
-                disabled={@pushing? or @pushable_count == 0}
-              >
-                <%= cond do %>
-                  <% @pushing? -> %>
-                    <span class="loading loading-spinner loading-xs" aria-hidden="true"></span>
-                    Pushing…
-                  <% is_nil(@current_scope) -> %>
-                    <%!-- The paywall boundary, stated up front: Pushing needs an
-                    account, and clicking here routes to signup with the Review kept. --%>
-                    <.icon name="hero-paper-airplane" class="size-4" />
-                    {ngettext(
-                      "Sign up to Push 1 Action Point",
-                      "Sign up to Push %{count} Action Points",
-                      @pushable_count
-                    )}
-                  <% true -> %>
-                    <.icon name="hero-paper-airplane" class="size-4" />
-                    {ngettext("Push 1 Action Point", "Push %{count} Action Points", @pushable_count)}
-                <% end %>
-              </button>
+            <div class="pt-8 pb-4">
+              <span class="text-[11px] tracking-[0.08em] text-base-content/65 uppercase">
+                Extraction · {Calendar.strftime(@extraction.inserted_at, "%-d %b %Y")}
+              </span>
+              <h1 class="mt-2 text-2xl font-semibold">Review your Action Points</h1>
+              <p class="mt-1 text-base-content/70">
+                {ngettext(
+                  "1 Action Point extracted from your Transcript.",
+                  "%{count} Action Points extracted from your Transcript.",
+                  @action_point_count
+                )}
+              </p>
+            </div>
+
+            <%!-- The tally and the promise sit together: the counts say where the
+            curation has got to, the line beside them says it is still reversible. --%>
+            <div
+              id="review-toolbar"
+              class="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-base-300/60 pb-3 text-xs text-base-content/65"
+            >
+              <span class="inline-flex items-center gap-1.5">
+                <span class="size-1.5 rounded-full bg-primary" aria-hidden="true"></span>
+                {@action_point_count - @rejected_count} accepted
+              </span>
+              <span :if={@rejected_count > 0} class="inline-flex items-center gap-1.5">
+                <span class="size-1.5 rounded-full bg-base-content/40" aria-hidden="true"></span>
+                {@rejected_count} rejected
+              </span>
+              <span :if={@pushable_count > 0} class="ml-auto">
+                Nothing is created in Linear until you Push.
+              </span>
             </div>
 
             <div
               :if={@push_failure}
               id="push-failure"
-              class="alert alert-error mb-4"
+              class="mb-4 flex gap-3 rounded-box border border-error/40 bg-error/10 p-4"
               role="alert"
             >
-              <.icon name="hero-exclamation-triangle" class="size-5" />
+              <.icon name="hero-exclamation-triangle" class="size-5 shrink-0 text-error" />
               <div>
                 <p class="font-semibold">
                   The Push stopped partway: {@push_failure.created} created, {@push_failure.remaining} not created.
                 </p>
-                <p class="text-sm">
+                <p class="mt-1 text-base-content/70">
                   {push_failure_reason(@push_failure.reason)} Pushing again creates only the missing ones — never a duplicate.
                 </p>
               </div>
@@ -94,48 +105,54 @@ defmodule ActionPointsWeb.ReviewLive do
             <div
               :if={@pushed_action_points != [] and @pushable_count == 0 and not @pushing?}
               id="push-confirmation"
-              class="alert alert-success mb-4 items-start"
+              class="mb-4 flex gap-3 rounded-box border border-success/40 bg-success/10 p-4"
             >
-              <.icon name="hero-check-circle" class="size-5" />
-              <div>
+              <.icon name="hero-check-circle" class="size-5 shrink-0 text-success" />
+              <div class="min-w-0">
                 <p class="font-semibold">
                   {ngettext(
-                    "1 issue created.",
-                    "%{count} issues created.",
+                    "1 task created in Linear.",
+                    "%{count} tasks created in Linear.",
                     length(@pushed_action_points)
-                  )}
+                  )} That's the meeting dealt with.
                 </p>
-                <ul class="mt-1 space-y-0.5 text-sm">
-                  <li :for={action_point <- @pushed_action_points}>
+                <ul class="mt-2 space-y-1 text-base-content/70">
+                  <li :for={action_point <- @pushed_action_points} class="truncate">
                     <a
                       href={action_point.sink_issue_url}
                       target="_blank"
                       rel="noopener"
-                      class="link"
+                      class="text-accent hover:underline"
                     >
-                      {action_point.sink_issue_identifier} — {action_point.title}
+                      <span class="font-medium">{action_point.sink_issue_identifier}</span>
+                      — {action_point.title}
                     </a>
                   </li>
                 </ul>
               </div>
             </div>
 
-            <ul id="action-points" phx-update="stream" class="space-y-4">
+            <ul id="action-points" phx-update="stream" class="space-y-2">
               <li
                 :for={{dom_id, action_point} <- @streams.action_points}
                 id={dom_id}
                 data-status={action_point.status}
                 class={[
-                  "card bg-base-200 p-5 transition-opacity",
-                  action_point.status == :rejected && "opacity-50"
+                  "group relative rounded-box border p-4 transition-colors",
+                  card_class(@editing, action_point)
                 ]}
               >
-                <%= if @editing && @editing.id == action_point.id do %>
+                <%= if editing?(@editing, action_point) do %>
+                  <%!-- Editing is a different mode, and the card says so out loud
+                  rather than relying on the reader spotting the inputs. --%>
+                  <span class="absolute -top-2.5 left-3 rounded-[3px] bg-primary px-1.5 py-0.5 text-[10px] font-semibold tracking-[0.09em] text-primary-content uppercase">
+                    Editing
+                  </span>
                   <.form
                     for={@edit_form}
                     id={"edit-#{dom_id}"}
                     phx-submit="save_edit"
-                    class="space-y-3"
+                    class="space-y-1"
                   >
                     <.input field={@edit_form[:title]} type="text" label="Title" />
                     <.input
@@ -144,7 +161,7 @@ defmodule ActionPointsWeb.ReviewLive do
                       rows="3"
                       label="Description"
                     />
-                    <div class="grid grid-cols-2 gap-3">
+                    <div class="grid gap-x-3 sm:grid-cols-2">
                       <.input
                         field={@edit_form[:assignee_guess]}
                         type="text"
@@ -153,7 +170,7 @@ defmodule ActionPointsWeb.ReviewLive do
                       />
                       <.input field={@edit_form[:due_date]} type="date" label="Due date" />
                     </div>
-                    <div class="flex justify-end gap-2">
+                    <div class="flex justify-end gap-2 pt-1">
                       <button
                         id={"#{dom_id}-cancel"}
                         type="button"
@@ -168,12 +185,12 @@ defmodule ActionPointsWeb.ReviewLive do
                 <% else %>
                   <div class="flex items-start justify-between gap-3">
                     <h2 class={[
-                      "font-semibold",
-                      action_point.status == :rejected && "line-through"
+                      "leading-snug font-semibold",
+                      action_point.status == :rejected && "text-base-content/65 line-through"
                     ]}>
                       {action_point.title}
                     </h2>
-                    <div class="flex shrink-0 gap-1">
+                    <div class="flex shrink-0 gap-0.5 opacity-60 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
                       <%= cond do %>
                         <% action_point.sink_issue_id -> %>
                           <a
@@ -181,7 +198,7 @@ defmodule ActionPointsWeb.ReviewLive do
                             href={action_point.sink_issue_url}
                             target="_blank"
                             rel="noopener"
-                            class="badge badge-success gap-1"
+                            class="inline-flex items-center gap-1 rounded-field border border-success/40 bg-success/10 px-2 py-0.5 text-xs font-medium text-success"
                             title="Created in your Task Sink"
                           >
                             <.icon name="hero-check-micro" class="size-3" />
@@ -219,34 +236,128 @@ defmodule ActionPointsWeb.ReviewLive do
                       <% end %>
                     </div>
                   </div>
-                  <p :if={action_point.description} class="mt-1 text-sm text-base-content/80">
+                  <p
+                    :if={action_point.description}
+                    class={[
+                      "mt-1.5",
+                      (action_point.status == :rejected && "text-base-content/65") ||
+                        "text-base-content/70"
+                    ]}
+                  >
                     {action_point.description}
                   </p>
-                  <div class="mt-3 flex flex-wrap gap-2 text-sm">
-                    <span
-                      :if={action_point.assignee_guess}
-                      data-role="assignee"
-                      class="badge badge-outline gap-1"
-                    >
-                      <.icon name="hero-user-micro" class="size-3" />
+                  <div class="mt-3 flex flex-wrap gap-1.5">
+                    <.chip :if={action_point.assignee_guess} role="assignee" icon="hero-user-micro">
                       {action_point.assignee_guess}
-                    </span>
-                    <span
+                    </.chip>
+                    <.chip
                       :if={action_point.due_date}
-                      data-role="due-date"
-                      class="badge badge-outline gap-1"
+                      role="due-date"
+                      icon="hero-calendar-micro"
                     >
-                      <.icon name="hero-calendar-micro" class="size-3" />
-                      {action_point.due_date}
-                    </span>
+                      {Calendar.strftime(action_point.due_date, "%-d %b %Y")}
+                    </.chip>
+                    <%!-- A missing due date is stated, not left blank: the model
+                    heard no date, which is different from nobody having looked. --%>
+                    <.chip
+                      :if={is_nil(action_point.due_date)}
+                      role="no-due-date"
+                      icon="hero-calendar-micro"
+                      empty
+                    >
+                      No due date
+                    </.chip>
                   </div>
                 <% end %>
               </li>
             </ul>
+
+            <div
+              :if={@pushable_count > 0 or @pushed_action_points == []}
+              class="sticky bottom-0 mt-4 flex flex-wrap items-center gap-3 rounded-box border border-base-300 bg-base-200/95 p-3 backdrop-blur"
+            >
+              <%!-- With nothing accepted the bar has no count worth stating, so
+              it names the way out instead of reading "0 Action Points ready". --%>
+              <p class="text-base-content/70">
+                <%= if @pushable_count > 0 do %>
+                  <span class="font-semibold text-base-content">{@pushable_count}</span>
+                  {ngettext("Action Point ready", "Action Points ready", @pushable_count)} · pushing to Linear
+                <% else %>
+                  Nothing accepted yet. Accept an Action Point to Push it.
+                <% end %>
+              </p>
+              <button
+                id="push-button"
+                class="btn btn-primary ml-auto"
+                phx-click="push"
+                disabled={@pushing? or @pushable_count == 0}
+              >
+                <%= cond do %>
+                  <% @pushing? -> %>
+                    <span class="loading loading-spinner loading-xs" aria-hidden="true"></span>
+                    Pushing…
+                  <% is_nil(@current_scope) -> %>
+                    <%!-- The paywall boundary, stated up front: Pushing needs an
+                    account, and clicking here routes to signup with the Review kept. --%>
+                    <.icon name="hero-paper-airplane" class="size-4" />
+                    {ngettext(
+                      "Sign up to Push 1 Action Point",
+                      "Sign up to Push %{count} Action Points",
+                      @pushable_count
+                    )}
+                  <% true -> %>
+                    <.icon name="hero-paper-airplane" class="size-4" />
+                    {ngettext("Push 1 Action Point", "Push %{count} Action Points", @pushable_count)}
+                <% end %>
+              </button>
+            </div>
         <% end %>
       </div>
     </Layouts.app>
     """
+  end
+
+  # One Action Point's metadata: assignee, due date, or the absence of a due
+  # date, which is drawn dashed because it states a fact rather than carrying one.
+  attr :role, :string, required: true, doc: "the data-role hook tests select on"
+  attr :icon, :string, required: true
+  attr :empty, :boolean, default: false, doc: "styles the chip as a stated absence"
+  slot :inner_block, required: true
+
+  defp chip(assigns) do
+    ~H"""
+    <span
+      data-role={@role}
+      class={[
+        "inline-flex items-center gap-1.5 rounded-field border border-base-300 px-2 py-0.5 text-xs",
+        (@empty && "border-dashed text-base-content/65") || "text-base-content/70"
+      ]}
+    >
+      <.icon name={@icon} class={if @empty, do: "size-3", else: "size-3 text-base-content/65"} />
+      {render_slot(@inner_block)}
+    </span>
+    """
+  end
+
+  defp editing?(nil, _action_point), do: false
+  defp editing?(editing, action_point), do: editing.id == action_point.id
+
+  # Reading, rejected, and editing are three visibly different cards: a rejected
+  # one drops out of the surface entirely, an editing one is lifted onto it.
+  defp card_class(editing, action_point) do
+    cond do
+      # A tinted ring rather than a drop shadow: the tokens set --depth: 0, so
+      # surfaces here separate by value and not by elevation, and a black
+      # shadow tuned for the dark canvas would read as grime on the light one.
+      editing?(editing, action_point) ->
+        "border-primary bg-base-300 ring-1 ring-primary/30"
+
+      action_point.status == :rejected ->
+        "border-dashed border-base-300 bg-transparent"
+
+      true ->
+        "border-base-300/60 bg-base-200 hover:border-base-300"
+    end
   end
 
   @impl true
@@ -447,6 +558,7 @@ defmodule ActionPointsWeb.ReviewLive do
   defp refresh_action_point(socket, action_point) do
     socket
     |> assign(:pushable_count, Meetings.count_pushable_action_points(action_point.extraction_id))
+    |> assign(:rejected_count, Meetings.count_rejected_action_points(action_point.extraction_id))
     |> stream_insert(:action_points, action_point)
   end
 
@@ -459,6 +571,7 @@ defmodule ActionPointsWeb.ReviewLive do
     |> assign(:edit_form, nil)
     |> assign(:action_point_count, length(action_points))
     |> assign(:pushable_count, Enum.count(action_points, &Meetings.ActionPoint.pushable?/1))
+    |> assign(:rejected_count, Enum.count(action_points, &(&1.status == :rejected)))
     |> assign(:pushed_action_points, Enum.filter(action_points, & &1.sink_issue_id))
     |> assign(:pushing?, false)
     |> assign(:push_failure, nil)

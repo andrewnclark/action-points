@@ -287,6 +287,20 @@ defmodule ActionPoints.Meetings do
     Repo.aggregate(pushable_query(extraction_id), :count)
   end
 
+  @doc """
+  Counts the Action Points rejected in this Review. Together with the total it
+  gives the accepted tally the Review screen shows while curating; a pushed
+  Action Point still counts as accepted.
+  """
+  def count_rejected_action_points(extraction_id) do
+    Repo.aggregate(
+      from(ap in ActionPoint,
+        where: ap.extraction_id == ^extraction_id and ap.status == :rejected
+      ),
+      :count
+    )
+  end
+
   # Pushable: accepted in the Review and not yet pushed. The single place the
   # predicate is written in SQL; `ActionPoint.pushable?/1` is its in-memory twin.
   defp pushable_query(extraction_id) do
