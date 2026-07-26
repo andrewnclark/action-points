@@ -126,6 +126,49 @@ defmodule ActionPointsWeb.CarryOverTest do
     assert Repo.aggregate(Meetings.Extraction, :count) == 1
   end
 
+  test "the signup screens say the Review is being kept", %{conn: conn} do
+    %{conn: conn, review: review} = run_anonymous_demo(conn)
+
+    review |> element("#push-button") |> render_click()
+    assert_redirect(review, ~p"/users/register")
+
+    # The promise the Push button made is restated by the page it lands on,
+    # counting what is actually waiting.
+    {:ok, registration, _html} = live(conn, ~p"/users/register")
+    assert has_element?(registration, "#review-kept", "2 Action Points")
+
+    registration
+    |> form("#registration_form", user: %{email: "waiting@example.com"})
+    |> render_submit()
+
+    # And again on the last click of the signup — the magic link's landing page.
+    user = Accounts.get_user_by_email("waiting@example.com")
+    {token, _hashed} = AccountsFixtures.generate_user_magic_link_token(user)
+
+    {:ok, confirmation, _html} = live(conn, ~p"/users/log-in/#{token}")
+    assert has_element?(confirmation, "#review-kept")
+  end
+
+  test "a Review with everything rejected is kept without promising a Push", %{conn: conn} do
+    %{conn: conn, review: review, extraction_id: extraction_id} = run_anonymous_demo(conn)
+
+    for action_point <-
+          Meetings.get_extraction!(extraction_id, get_session(conn, :anon_session_token)).action_points do
+      review |> element("#action_points-#{action_point.id}-reject") |> render_click()
+    end
+
+    {:ok, registration, html} = live(conn, ~p"/users/register")
+
+    assert has_element?(registration, "#review-kept")
+    refute html =~ "Create an account to Push"
+  end
+
+  test "the signup screens say nothing about a Review when there is none", %{conn: conn} do
+    {:ok, registration, _html} = live(conn, ~p"/users/register")
+
+    refute has_element?(registration, "#review-kept")
+  end
+
   test "logging in without a Demo Extraction keeps the normal redirect", %{conn: conn} do
     conn = get(conn, ~p"/")
     {_user, conn} = sign_up_and_log_in(conn, "no-demo@example.com")

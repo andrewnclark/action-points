@@ -17,8 +17,10 @@ defmodule ActionPointsWeb.UserLive.ConfirmationTest do
           Accounts.deliver_login_instructions(user, url)
         end)
 
-      {:ok, _lv, html} = live(conn, ~p"/users/log-in/#{token}")
-      assert html =~ "Confirm and stay logged in"
+      {:ok, lv, html} = live(conn, ~p"/users/log-in/#{token}")
+      assert has_element?(lv, "#confirmation_form button", "Confirm and stay logged in")
+      # What the account comes with, said at the moment it starts existing.
+      assert html =~ "Free Meeting"
     end
 
     test "renders login page for confirmed user", %{conn: conn, confirmed_user: user} do
@@ -27,9 +29,10 @@ defmodule ActionPointsWeb.UserLive.ConfirmationTest do
           Accounts.deliver_login_instructions(user, url)
         end)
 
-      {:ok, _lv, html} = live(conn, ~p"/users/log-in/#{token}")
+      {:ok, lv, html} = live(conn, ~p"/users/log-in/#{token}")
       refute html =~ "Confirm my account"
-      assert html =~ "Keep me logged in on this device"
+      assert html =~ "Welcome back"
+      assert has_element?(lv, "#login_form button", "Keep me logged in on this device")
     end
 
     test "renders login page for already logged in user", %{conn: conn, confirmed_user: user} do
@@ -73,7 +76,7 @@ defmodule ActionPointsWeb.UserLive.ConfirmationTest do
         live(conn, ~p"/users/log-in/#{token}")
         |> follow_redirect(conn, ~p"/users/log-in")
 
-      assert html =~ "Magic link is invalid or it has expired"
+      assert html =~ "That login link is invalid or it has expired"
     end
 
     test "logs confirmed user in without changing confirmed_at", %{
@@ -104,7 +107,7 @@ defmodule ActionPointsWeb.UserLive.ConfirmationTest do
         live(conn, ~p"/users/log-in/#{token}")
         |> follow_redirect(conn, ~p"/users/log-in")
 
-      assert html =~ "Magic link is invalid or it has expired"
+      assert html =~ "That login link is invalid or it has expired"
     end
 
     test "raises error for invalid token", %{conn: conn} do
@@ -112,7 +115,7 @@ defmodule ActionPointsWeb.UserLive.ConfirmationTest do
         live(conn, ~p"/users/log-in/invalid-token")
         |> follow_redirect(conn, ~p"/users/log-in")
 
-      assert html =~ "Magic link is invalid or it has expired"
+      assert html =~ "That login link is invalid or it has expired"
     end
   end
 end

@@ -9,62 +9,121 @@ defmodule ActionPointsWeb.UserLive.Settings do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="text-center">
-        <.header>
-          Account Settings
-          <:subtitle>Manage your account email address and password settings</:subtitle>
-        </.header>
+      <div class="mx-auto max-w-md pt-10">
+        <Layouts.page_lead eyebrow="Account" title="Your account.">
+          <:lead>The address your login links go to, and an optional password.</:lead>
+        </Layouts.page_lead>
+
+        <%!-- The two facts an account holder comes here to check, before the two
+        things they came here to change. --%>
+        <dl class="mt-8 grid gap-px overflow-hidden rounded-box border border-base-300 bg-base-300 sm:grid-cols-2">
+          <div class="bg-base-200 p-4">
+            <dt class="text-[11px] font-medium tracking-[0.08em] text-base-content/65 uppercase">
+              Email
+            </dt>
+            <dd class="mt-1 truncate font-medium">{@current_email}</dd>
+          </div>
+          <div class="bg-base-200 p-4">
+            <dt class="text-[11px] font-medium tracking-[0.08em] text-base-content/65 uppercase">
+              Credits
+            </dt>
+            <dd class="mt-1 font-medium">
+              {@current_scope.credit_balance}
+              <.link navigate={~p"/buy"} class="ml-1 text-xs font-normal text-accent hover:underline">
+                Buy a Pack
+              </.link>
+            </dd>
+          </div>
+        </dl>
+
+        <section class="mt-4 rounded-box border border-base-300 bg-base-200 p-6">
+          <h2 class="font-semibold">Change email</h2>
+          <p class="mt-1 text-base-content/70">
+            We send a confirmation link to the new address. The change lands when you
+            open it — until then, login links keep going to the old one.
+          </p>
+
+          <.form
+            for={@email_form}
+            id="email_form"
+            phx-submit="update_email"
+            phx-change="validate_email"
+            class="mt-5"
+          >
+            <.input
+              field={@email_form[:email]}
+              type="email"
+              label="New email"
+              autocomplete="username"
+              spellcheck="false"
+              required
+            />
+            <button class="btn btn-primary mt-2" phx-disable-with="Sending the link…">
+              Change email
+            </button>
+          </.form>
+        </section>
+
+        <section class="mt-4 rounded-box border border-base-300 bg-base-200 p-6">
+          <h2 class="font-semibold">
+            {if @has_password?, do: "Change password", else: "Set a password"}
+          </h2>
+          <p class="mt-1 text-base-content/70">
+            <%= if @has_password? do %>
+              The new password replaces the old one everywhere. Logging in by emailed
+              link keeps working either way.
+            <% else %>
+              Optional. Logging in by emailed link needs no password — set one only if
+              you'd rather type it.
+            <% end %>
+          </p>
+
+          <.form
+            for={@password_form}
+            id="password_form"
+            action={~p"/users/update-password"}
+            method="post"
+            phx-change="validate_password"
+            phx-submit="update_password"
+            phx-trigger-action={@trigger_submit}
+            class="mt-5"
+          >
+            <input
+              name={@password_form[:email].name}
+              type="hidden"
+              id="hidden_user_email"
+              spellcheck="false"
+              value={@current_email}
+            />
+            <.input
+              field={@password_form[:password]}
+              type="password"
+              label="New password"
+              autocomplete="new-password"
+              spellcheck="false"
+              required
+            />
+            <.input
+              field={@password_form[:password_confirmation]}
+              type="password"
+              label="Confirm new password"
+              autocomplete="new-password"
+              spellcheck="false"
+            />
+            <button class="btn btn-primary mt-2" phx-disable-with="Saving…">
+              Save password
+            </button>
+          </.form>
+        </section>
+
+        <p class="mt-4 text-center text-xs text-base-content/65">
+          Pushing to Linear is set up in <.link
+            navigate={~p"/settings/sink"}
+            class="text-accent hover:underline"
+            phx-no-format
+          >Sink Settings</.link>.
+        </p>
       </div>
-
-      <.form for={@email_form} id="email_form" phx-submit="update_email" phx-change="validate_email">
-        <.input
-          field={@email_form[:email]}
-          type="email"
-          label="Email"
-          autocomplete="username"
-          spellcheck="false"
-          required
-        />
-        <.button variant="primary" phx-disable-with="Changing...">Change Email</.button>
-      </.form>
-
-      <div class="divider" />
-
-      <.form
-        for={@password_form}
-        id="password_form"
-        action={~p"/users/update-password"}
-        method="post"
-        phx-change="validate_password"
-        phx-submit="update_password"
-        phx-trigger-action={@trigger_submit}
-      >
-        <input
-          name={@password_form[:email].name}
-          type="hidden"
-          id="hidden_user_email"
-          spellcheck="false"
-          value={@current_email}
-        />
-        <.input
-          field={@password_form[:password]}
-          type="password"
-          label="New password"
-          autocomplete="new-password"
-          spellcheck="false"
-          required
-        />
-        <.input
-          field={@password_form[:password_confirmation]}
-          type="password"
-          label="Confirm new password"
-          autocomplete="new-password"
-          spellcheck="false"
-        />
-        <.button variant="primary" phx-disable-with="Saving...">
-          Save Password
-        </.button>
-      </.form>
     </Layouts.app>
     """
   end
@@ -91,6 +150,7 @@ defmodule ActionPointsWeb.UserLive.Settings do
     socket =
       socket
       |> assign(:current_email, user.email)
+      |> assign(:has_password?, not is_nil(user.hashed_password))
       |> assign(:email_form, to_form(email_changeset))
       |> assign(:password_form, to_form(password_changeset))
       |> assign(:trigger_submit, false)
