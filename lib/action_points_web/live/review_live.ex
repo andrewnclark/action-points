@@ -17,26 +17,54 @@ defmodule ActionPointsWeb.ReviewLive do
       <div>
         <%= case @extraction.status do %>
           <% status when status in [:pending, :running] -> %>
-            <div id="extraction-progress" class="py-24 text-center">
-              <span class="loading loading-dots loading-lg text-primary" aria-hidden="true"></span>
-              <h1 class="mt-6 text-2xl font-semibold">Extracting Action Points</h1>
+            <%!-- Waiting is a screen, not an interstitial: it names the step
+            running, shows the run is alive, and says what it will cost. --%>
+            <.status_card id="extraction-progress">
+              <span class="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.08em] text-base-content/65 uppercase">
+                <span
+                  class="size-1.5 rounded-full bg-primary motion-safe:animate-pulse"
+                  aria-hidden="true"
+                /> Extraction running
+              </span>
+              <h1 class="mt-3 text-2xl font-semibold">Extracting Action Points</h1>
               <p class="mt-2 text-base-content/70">
                 Reading your Transcript. A long meeting can take up to a minute.
               </p>
-            </div>
+              <div
+                class="sweep mt-6 h-1 rounded-full"
+                role="progressbar"
+                aria-label="Extraction in progress"
+              />
+              <:footnote>
+                {if @current_scope,
+                  do: "A Credit is spent only if the Extraction succeeds.",
+                  else: "The Demo is free — nothing is charged either way."}
+              </:footnote>
+            </.status_card>
           <% :failed -> %>
-            <div id="extraction-failed" class="py-24 text-center">
+            <%!-- A failure is where trust is won or lost: say what happened, say
+            it cost nothing, and put the next move under the reader's hand. --%>
+            <.status_card id="extraction-failed">
               <span class="mx-auto grid size-10 place-items-center rounded-box border border-error/40 bg-error/10">
                 <.icon name="hero-exclamation-triangle" class="size-5 text-error" />
               </span>
               <h1 class="mt-4 text-2xl font-semibold">The Extraction failed</h1>
               <p class="mt-2 text-base-content/70">
-                No Credit was spent. This is usually temporary — run it again.
+                {failure_reason(@extraction.failure_reason)}
               </p>
-              <button id="retry-extraction" class="btn btn-primary mt-6" phx-click="retry">
-                Retry Extraction
-              </button>
-            </div>
+              <div class="mt-6 flex flex-wrap justify-center gap-2">
+                <button id="retry-extraction" class="btn btn-primary btn-sm" phx-click="retry">
+                  <.icon name="hero-arrow-path" class="size-4" /> Retry Extraction
+                </button>
+                <.link navigate={~p"/"} class="btn btn-ghost btn-sm text-base-content/70">
+                  Start over
+                </.link>
+              </div>
+              <:footnote>
+                No Credit was spent — a Credit is only ever consumed by an Extraction
+                that succeeds.
+              </:footnote>
+            </.status_card>
           <% :succeeded when @action_point_count == 0 -> %>
             <div id="review-empty" class="py-24 text-center">
               <h1 class="text-2xl font-semibold">No Action Points in this Transcript</h1>
@@ -317,6 +345,27 @@ defmodule ActionPointsWeb.ReviewLive do
     """
   end
 
+  # The Extraction's waiting and failed screens are one designed pair — the two
+  # ways a run can be found in progress — so they share their chrome: the same
+  # panel, and a footnote below a divider that always says what the run cost.
+  attr :id, :string, required: true
+  slot :inner_block, required: true
+  slot :footnote, required: true
+
+  defp status_card(assigns) do
+    ~H"""
+    <div
+      id={@id}
+      class="mx-auto mt-16 max-w-md rounded-box border border-base-300 bg-base-200 p-8 text-center"
+    >
+      {render_slot(@inner_block)}
+      <p class="mt-6 border-t border-base-300/60 pt-4 text-xs text-base-content/65">
+        {render_slot(@footnote)}
+      </p>
+    </div>
+    """
+  end
+
   # One Action Point's metadata: assignee, due date, or the absence of a due
   # date, which is drawn dashed because it states a fact rather than carrying one.
   attr :role, :string, required: true, doc: "the data-role hook tests select on"
@@ -582,6 +631,23 @@ defmodule ActionPointsWeb.ReviewLive do
     %{id: id, session_token: session_token} = socket.assigns.extraction
     Meetings.get_extraction!(id, session_token)
   end
+
+  # What went wrong, in the reader's terms. Only the causes that change the
+  # reader's next move are named; the rest share the "try again" wording,
+  # because a visitor cannot act on the difference between a 500 and a crash.
+  defp failure_reason("truncated"),
+    do:
+      "That meeting produced more Action Points than one Extraction can return. Splitting the Transcript in two and running each half gets all of them."
+
+  defp failure_reason("rate_limited"),
+    do: "The extraction service is busy right now. Give it a minute and run it again."
+
+  defp failure_reason("refused"),
+    do:
+      "The model would not process that Transcript. If it holds anything sensitive, trimming that part and running it again usually works."
+
+  defp failure_reason(_reason),
+    do: "Something went wrong on our side. This is usually temporary — run it again."
 
   defp push_failure_reason(:invalid_key),
     do: "Linear rejected the connected API key — check it in settings."

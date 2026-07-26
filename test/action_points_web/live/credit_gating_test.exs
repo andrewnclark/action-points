@@ -30,6 +30,20 @@ defmodule ActionPointsWeb.CreditGatingTest do
   describe "signed-in Extraction and the Credit" do
     setup :register_and_log_in_user
 
+    test "the composer quotes a Credit while there is one, and says so when there isn't",
+         %{conn: conn, user: user} do
+      {:ok, home, _html} = live(conn, ~p"/")
+      assert has_element?(home, "#transcript-form", "1 Credit")
+
+      # An empty balance must not quote a price the account can't pay: submitting
+      # would only bounce the reader to the Credits gate.
+      zero_out_balance(user)
+
+      {:ok, home, _html} = live(conn, ~p"/")
+      assert has_element?(home, "#transcript-form", "No Credits left")
+      refute has_element?(home, "#transcript-form", "1 Credit")
+    end
+
     test "a successful Extraction drops the visible balance from 1 Credit to 0, live",
          %{conn: conn} do
       conn = get(conn, ~p"/")
@@ -119,7 +133,7 @@ defmodule ActionPointsWeb.CreditGatingTest do
       # The third is refused on the landing page, with no Extraction created.
       {:ok, home, _html} = live(conn, ~p"/")
       submit_transcript(home)
-      assert has_element?(home, "#flash-group", "rate-limited")
+      assert has_element?(home, "#rate-limit-notice", "Demo")
 
       assert Repo.aggregate(ActionPoints.Meetings.Extraction, :count) == 2
 

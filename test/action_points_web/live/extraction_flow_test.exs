@@ -71,6 +71,9 @@ defmodule ActionPointsWeb.ExtractionFlowTest do
       refute has_element?(review, "#action-points")
     end)
 
+    # The failure has to say what it cost, which is nothing.
+    assert has_element?(review, "#extraction-failed", "No Credit was spent")
+
     # The retry runs a fresh Extraction attempt — this time it succeeds.
     stub_extractor(
       {:ok,
