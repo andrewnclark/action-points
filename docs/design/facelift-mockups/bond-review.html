@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bond — Review — ActionPoints mockup</title>
+
+<!--
+  DIRECTION CONTRACT — "BOND"
+
+  THESIS: Review is an examination, not an inbox. Every Action Point is a numbered claim on a
+  ruled sheet with a visible disposition — accepted, void, amended, granted — and refuses the
+  card feed whose controls only appear on hover.
+
+  OWN-WORLD: The utility patent drawing sheet. Warm bond ground, navy india ink, hairline rules
+  terminating in small circles, reference numerals in the gutter, carmine reserved for what is
+  under examination, a green seal for what has been granted, hatching for what is void.
+  Libre Caslon Display heads, Public Sans text, Spline Sans Mono numerals.
+
+  STORY: The user reads six claims, sees at a glance which are in and which are out, amends one
+  in place, and commits the sheet in a deliberate two-step Push that says what it will create.
+
+  FIRST VIEWPORT: Sheet head with the extraction reference and Credit balance; a disposition
+  strip counting accepted and void; then the numbered entries, controls visible at rest on
+  every row, with the commit block ruled off at the foot of the sheet.
+
+  FORM: Patent drawing sheet, candidate 4 of the grounded list, fused from the dealt challenger
+  and taking the two-key-commit staging for the Push. Seed key ap-facelift-light-1.
+-->
+
+<style>
+  @font-face {
+    font-family: 'Libre Caslon Display';
+    src: url('fonts/LibreCaslonDisplay-400.woff2') format('woff2');
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Public Sans';
+    src: url('fonts/PublicSans-var.woff2') format('woff2');
+    font-weight: 100 900; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Spline Sans Mono';
+    src: url('fonts/SplineSansMono-var.woff2') format('woff2');
+    font-weight: 300 700; font-style: normal; font-display: swap;
+  }
+
+  :root {
+    --bond:        #f4f0e6;
+    --sheet:       #fcfaf4;
+    --sheet-sunk:  #eee9dc;
+    --ink:         #1b2432;
+    --ink-2:       #4d5666;
+    --ink-3:       #6f7889;
+    --rule:        #c9c2b0;
+    --rule-soft:   #ded8c8;
+    --exam:        #a8322b;
+    --exam-soft:   #f3e3e0;
+    --granted:     #2e5e4e;
+    --granted-soft:#e2ece7;
+    --radius:      2px;
+    --display: 'Libre Caslon Display', Georgia, serif;
+    --text:    'Public Sans', system-ui, sans-serif;
+    --num:     'Spline Sans Mono', ui-monospace, SFMono-Regular, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-font-smoothing: antialiased; }
+  body {
+    margin: 0; background: var(--bond); color: var(--ink);
+    font-family: var(--text); font-size: 15px; line-height: 1.6;
+  }
+  a { color: inherit; }
+
+  .sheet {
+    max-width: 1080px; margin: 22px auto 40px; background: var(--sheet);
+    border: 1px solid var(--ink); position: relative;
+    box-shadow: 0 1px 0 rgba(27,36,50,.10), 0 18px 40px -28px rgba(27,36,50,.45);
+  }
+  .sheet::before {
+    content: ""; position: absolute; inset: 6px; border: 1px solid var(--rule); pointer-events: none;
+  }
+  .corner { position: absolute; width: 13px; height: 13px; border: 0 solid var(--ink); z-index: 2; }
+  .corner.tl { top: 6px; left: 6px; border-top-width: 1px; border-left-width: 1px; }
+  .corner.tr { top: 6px; right: 6px; border-top-width: 1px; border-right-width: 1px; }
+  .corner.bl { bottom: 6px; left: 6px; border-bottom-width: 1px; border-left-width: 1px; }
+  .corner.br { bottom: 6px; right: 6px; border-bottom-width: 1px; border-right-width: 1px; }
+
+  .caps {
+    font-family: var(--num); font-size: 10.5px; font-weight: 500;
+    letter-spacing: .17em; text-transform: uppercase; color: var(--ink-3);
+  }
+
+  /* ── Sheet head ──────────────────────────────────────────────── */
+  .head {
+    display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+    gap: 24px; padding: 20px 32px 16px; border-bottom: 1px solid var(--ink);
+  }
+  .head .left, .head .right { display: flex; align-items: center; gap: 16px; }
+  .head .right { justify-content: flex-end; }
+  .wordmark {
+    font-family: var(--display); font-size: 23px; letter-spacing: .13em;
+    text-transform: uppercase; text-decoration: none; white-space: nowrap;
+  }
+  .wordmark .dot { color: var(--exam); }
+  .head .sub {
+    display: block; text-align: center; margin-top: 3px;
+    font-family: var(--num); font-size: 9.5px; letter-spacing: .28em;
+    text-transform: uppercase; color: var(--ink-3);
+  }
+  .credits {
+    display: inline-flex; align-items: baseline; gap: 7px; text-decoration: none;
+    border: 1px solid var(--rule); border-radius: var(--radius); padding: 5px 11px;
+    font-family: var(--num); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--ink-2);
+  }
+  .credits b { font-size: 13px; color: var(--ink); font-weight: 500; }
+  .credits:hover { border-color: var(--ink); }
+  .avatar {
+    width: 30px; height: 30px; border: 1px solid var(--ink); border-radius: var(--radius);
+    display: grid; place-items: center; background: var(--sheet-sunk);
+    font-family: var(--num); font-size: 11px; color: var(--ink);
+  }
+
+  /* ── Controls: visible at rest, named by their action ────────── */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    height: 38px; padding: 0 18px; border: 1px solid var(--ink); border-radius: var(--radius);
+    background: var(--sheet); color: var(--ink); cursor: pointer; text-decoration: none;
+    font-family: var(--num); font-size: 11.5px; font-weight: 500;
+    letter-spacing: .14em; text-transform: uppercase;
+    transition: background .14s ease, color .14s ease, box-shadow .14s ease, transform .14s ease;
+  }
+  .btn:hover { box-shadow: 2px 2px 0 var(--ink); transform: translate(-1px,-1px); }
+  .btn:active { box-shadow: none; transform: none; }
+  .btn:focus-visible { outline: 2px solid var(--exam); outline-offset: 3px; }
+  .btn-primary { background: var(--ink); color: var(--sheet); }
+  .btn-primary:hover { background: #0f1725; }
+  .btn-quiet { border-color: transparent; color: var(--ink-2); }
+  .btn-quiet:hover { color: var(--ink); border-color: var(--rule); box-shadow: none; transform: none; }
+  .btn-sm { height: 31px; padding: 0 12px; font-size: 10.5px; letter-spacing: .12em; }
+  .btn-void { border-color: var(--rule); color: var(--ink-2); }
+  .btn-void:hover { border-color: var(--ink); color: var(--ink); }
+  .btn-reinstate { border-color: var(--ink); background: var(--sheet); }
+
+  /* ── Examination header ──────────────────────────────────────── */
+  .exam-head { padding: 30px 32px 0; }
+  .ref { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+  .ref .rule { flex: 1; height: 1px; background: var(--rule); }
+  h1 {
+    font-family: var(--display); font-weight: 400; margin: 0;
+    font-size: 38px; line-height: 1.08; letter-spacing: -0.012em;
+  }
+  .exam-head .lede { margin: 9px 0 0; color: var(--ink-2); font-size: 15.5px; max-width: 62ch; }
+
+  /* Disposition strip: the count, stated in the sheet's own language */
+  .dispositions {
+    display: flex; align-items: center; gap: 26px; flex-wrap: wrap;
+    margin: 22px 0 0; padding: 11px 32px;
+    border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink);
+    background: var(--sheet-sunk);
+  }
+  .disp { display: inline-flex; align-items: baseline; gap: 8px; }
+  .disp .n { font-family: var(--num); font-size: 16px; font-weight: 500; }
+  .disp .k { font-family: var(--num); font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-2); }
+  .disp.accepted .n { color: var(--exam); }
+  .disp.void .n { color: var(--ink-3); }
+  .dispositions .spacer { flex: 1; }
+  .dispositions .caveat { font-size: 13px; color: var(--ink-2); }
+
+  /* ── Entries ─────────────────────────────────────────────────── */
+  .entries { list-style: none; margin: 0; padding: 0; }
+  .entry {
+    display: grid; grid-template-columns: 62px 1fr; gap: 18px;
+    padding: 20px 32px; border-bottom: 1px solid var(--rule-soft);
+    position: relative;
+  }
+  .entry:last-child { border-bottom: 0; }
+  .entry:hover { background: #fdfcf8; }
+
+  .gutter { padding-top: 2px; }
+  .gutter .numeral {
+    display: block; font-family: var(--num); font-size: 19px; font-weight: 500;
+    color: var(--exam); line-height: 1;
+  }
+  .gutter .leader {
+    display: block; width: 100%; height: 1px; background: var(--rule); margin-top: 11px;
+    position: relative;
+  }
+  .gutter .leader::after {
+    content: ""; position: absolute; right: -1px; top: -2px; width: 5px; height: 5px;
+    border: 1px solid var(--rule); border-radius: 50%; background: var(--sheet);
+  }
+
+  .entry-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 22px; }
+  .entry h2 {
+    margin: 0; font-size: 17px; font-weight: 600; line-height: 1.35; letter-spacing: -0.01em;
+    max-width: 46ch;
+  }
+  .entry .desc { margin: 6px 0 0; color: var(--ink-2); font-size: 14px; max-width: 64ch; }
+  .actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+  .spec {
+    display: flex; flex-wrap: wrap; gap: 22px; margin-top: 13px;
+    font-family: var(--num); font-size: 11.5px; letter-spacing: .03em;
+  }
+  .spec .k { color: var(--ink-3); text-transform: uppercase; letter-spacing: .14em; margin-right: 7px; }
+  .spec .v.none { color: var(--ink-3); }
+
+  /* Void: struck from the sheet, hatched, still readable, one control to reinstate. */
+  .entry.is-void {
+    background-image: repeating-linear-gradient(-45deg,
+      transparent 0 6px, rgba(27,36,50,.045) 6px 7px);
+  }
+  .entry.is-void h2 { text-decoration: line-through; color: var(--ink-3); text-decoration-thickness: 1px; }
+  .entry.is-void .desc, .entry.is-void .spec { color: var(--ink-3); }
+  .entry.is-void .gutter .numeral { color: var(--ink-3); }
+  .stamp {
+    display: inline-block; margin-top: 9px; padding: 2px 8px;
+    border: 1.5px solid var(--ink-3); border-radius: var(--radius);
+    font-family: var(--num); font-size: 10px; font-weight: 500;
+    letter-spacing: .2em; text-transform: uppercase; color: var(--ink-3);
+    transform: rotate(-3deg);
+  }
+  .stamp.granted { border-color: var(--granted); color: var(--granted); }
+
+  /* Amendment: the entry opens into a ruled correction block. */
+  .entry.is-amending { background: var(--exam-soft); }
+  .amend-head {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 15px;
+    font-family: var(--num); font-size: 10.5px; font-weight: 500;
+    letter-spacing: .17em; text-transform: uppercase; color: var(--exam);
+  }
+  .amend-head .rule { flex: 1; height: 1px; background: rgba(168,50,43,.34); }
+  .field { display: block; margin-bottom: 13px; }
+  .field > span {
+    display: block; font-family: var(--num); font-size: 10px; letter-spacing: .17em;
+    text-transform: uppercase; color: var(--exam); margin-bottom: 5px;
+  }
+  input[type=text], input[type=date], textarea {
+    display: block; width: 100%; font-family: var(--text); font-size: 14.5px; color: var(--ink);
+    background: var(--sheet); border: 1px solid var(--ink); border-radius: var(--radius);
+    padding: 9px 12px; line-height: 1.5;
+  }
+  input[type=date] { font-family: var(--num); font-size: 13px; }
+  textarea { resize: vertical; min-height: 68px; }
+  input:focus, textarea:focus { outline: 2px solid var(--exam); outline-offset: 1px; }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
+  .amend-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+
+  /* ── Commit block: the deliberate two-step Push ──────────────── */
+  .commit {
+    border-top: 1px solid var(--ink); background: var(--sheet-sunk);
+    padding: 20px 32px; display: grid; grid-template-columns: 1fr auto; gap: 26px; align-items: center;
+  }
+  .commit h2 { font-family: var(--display); font-weight: 400; margin: 0 0 5px; font-size: 22px; }
+  .commit p { margin: 0; font-size: 14px; color: var(--ink-2); max-width: 58ch; }
+  .commit p b { font-weight: 600; color: var(--ink); }
+  .commit .actions { display: flex; align-items: center; gap: 10px; }
+
+  /* ── Sheet foot ──────────────────────────────────────────────── */
+  .foot {
+    border-top: 1px solid var(--ink); padding: 13px 32px;
+    display: flex; align-items: center; justify-content: space-between; gap: 20px;
+  }
+
+  /* ── Mockup scaffolding (not part of the design) ─────────────── */
+  .mockup-nav {
+    position: fixed; left: 16px; bottom: 16px; z-index: 90;
+    display: flex; align-items: center; gap: 4px;
+    padding: 5px 6px 5px 10px; border-radius: 999px;
+    background: #1c1c1e; border: 1px solid #34343a;
+    box-shadow: 0 8px 28px rgba(0,0,0,.5);
+    font: 500 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: #9a9aa2; letter-spacing: .04em;
+  }
+  .mockup-nav a { text-decoration: none; color: #d4d4d8; padding: 5px 9px; border-radius: 999px; }
+  .mockup-nav a:hover { background: #2a2a2e; }
+  .mockup-nav a[aria-current] { background: #3a3a41; color: #fff; }
+  .mockup-nav .sep { color: #4a4a52; }
+
+  @media (max-width: 860px) {
+    .entry-top { flex-direction: column; }
+    .actions { width: 100%; }
+    .commit { grid-template-columns: 1fr; }
+    .field-row { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 680px) {
+    .sheet { margin: 10px; }
+    .head { grid-template-columns: 1fr; gap: 12px; text-align: center; padding-left: 18px; padding-right: 18px; }
+    .head .left, .head .right { justify-content: center; flex-wrap: wrap; }
+    .exam-head, .dispositions, .entry, .commit, .foot { padding-left: 18px; padding-right: 18px; }
+    h1 { font-size: 30px; }
+    .entry { grid-template-columns: 1fr; gap: 10px; }
+    .gutter { display: flex; align-items: center; gap: 12px; }
+    .gutter .leader { margin-top: 0; }
+  }
+</style>
+</head>
+<body>
+
+<div class="sheet">
+  <span class="corner tl"></span><span class="corner tr"></span>
+  <span class="corner bl"></span><span class="corner br"></span>
+
+  <header class="head">
+    <div class="left">
+      <span class="caps">Review sheet</span>
+    </div>
+    <div>
+      <a class="wordmark" href="bond-home.html">Action<span class="dot">·</span>Points</a>
+      <span class="sub">Transcript to tasks</span>
+    </div>
+    <div class="right">
+      <a class="credits" href="#"><b>3</b> Credits</a>
+      <div class="avatar">MB</div>
+    </div>
+  </header>
+
+  <div class="exam-head">
+    <div class="ref">
+      <span class="caps">Extraction 4471 · Product sync · 26 Jul 2026 · 14 min</span>
+      <span class="rule"></span>
+    </div>
+    <h1>Review your Action Points</h1>
+    <p class="lede">
+      6 Action Points extracted from your transcript. Accept, amend, or void each one —
+      then Push the sheet.
+    </p>
+  </div>
+
+  <div class="dispositions">
+    <span class="disp accepted"><span class="n">5</span><span class="k">Accepted</span></span>
+    <span class="disp void"><span class="n">1</span><span class="k">Void</span></span>
+    <span class="spacer"></span>
+    <span class="caveat">Nothing is created in Linear until you Push.</span>
+  </div>
+
+  <ul class="entries">
+
+    <li class="entry">
+      <div class="gutter"><span class="numeral">01</span><span class="leader"></span></div>
+      <div>
+        <div class="entry-top">
+          <div>
+            <h2>Finish the pricing table on the landing page</h2>
+            <p class="desc">The landing page is complete apart from the pricing table. Dan committed to finishing it before the Thursday cut-off.</p>
+          </div>
+          <div class="actions">
+            <button class="btn btn-sm">Amend</button>
+            <button class="btn btn-sm btn-void">Void</button>
+          </div>
+        </div>
+        <div class="spec">
+          <span><span class="k">Assignee</span><span class="v">Dan Whitlock</span></span>
+          <span><span class="k">Due</span><span class="v">30 Jul 2026</span></span>
+          <span><span class="k">Source</span><span class="v">Line 4</span></span>
+        </div>
+      </div>
+    </li>
+
+    <li class="entry is-amending">
+      <div class="gutter"><span class="numeral">02</span><span class="leader"></span></div>
+      <div>
+        <div class="amend-head">
+          <span>Amendment · Entry 02</span>
+          <span class="rule"></span>
+        </div>
+        <label class="field">
+          <span>Title</span>
+          <input type="text" value="Send the final onboarding emails to Maya for sign-off">
+        </label>
+        <label class="field">
+          <span>Description</span>
+          <textarea>Drafts are done. Priya sends the final versions tomorrow for Maya's approval before launch.</textarea>
+        </label>
+        <div class="field-row">
+          <label class="field">
+            <span>Assignee</span>
+            <input type="text" value="Priya Raman">
+          </label>
+          <label class="field">
+            <span>Due date</span>
+            <input type="date" value="2026-07-27">
+          </label>
+        </div>
+        <div class="amend-actions">
+          <button class="btn btn-sm btn-quiet">Cancel</button>
+          <button class="btn btn-sm btn-primary">Save amendment</button>
+        </div>
+      </div>
+    </li>
+
+    <li class="entry is-void">
+      <div class="gutter"><span class="numeral">03</span><span class="leader"></span></div>
+      <div>
+        <div class="entry-top">
+          <div>
+            <h2>Write a subject line for the welcome email</h2>
+            <p class="desc">Priya flagged the welcome email as still missing a proper subject line.</p>
+            <span class="stamp">Void</span>
+          </div>
+          <div class="actions">
+            <button class="btn btn-sm btn-reinstate">Reinstate</button>
+          </div>
+        </div>
+        <div class="spec">
+          <span><span class="k">Assignee</span><span class="v">Priya Raman</span></span>
+          <span><span class="k">Due</span><span class="v none">None said aloud</span></span>
+          <span><span class="k">Source</span><span class="v">Line 12</span></span>
+        </div>
+      </div>
+    </li>
+
+    <li class="entry">
+      <div class="gutter"><span class="numeral">04</span><span class="leader"></span></div>
+      <div>
+        <div class="entry-top">
+          <div>
+            <h2>Get legal sign-off on the updated terms</h2>
+            <p class="desc">Dan emails Sofia in legal today and asks for a yes or no on the updated terms by Friday, before the switch is flipped.</p>
+          </div>
+          <div class="actions">
+            <button class="btn btn-sm">Amend</button>
+            <button class="btn btn-sm btn-void">Void</button>
+          </div>
+        </div>
+        <div class="spec">
+          <span><span class="k">Assignee</span><span class="v">Dan Whitlock</span></span>
+          <span><span class="k">Due</span><span class="v">31 Jul 2026</span></span>
+          <span><span class="k">Source</span><span class="v">Line 14</span></span>
+        </div>
+      </div>
+    </li>
+
+    <li class="entry">
+      <div class="gutter"><span class="numeral">05</span><span class="leader"></span></div>
+      <div>
+        <div class="entry-top">
+          <div>
+            <h2>Fix the signup form on Safari</h2>
+            <p class="desc">The signup form breaks on Safari. Jonas is out this week, so Dan picks it up once the pricing table ships.</p>
+          </div>
+          <div class="actions">
+            <button class="btn btn-sm">Amend</button>
+            <button class="btn btn-sm btn-void">Void</button>
+          </div>
+        </div>
+        <div class="spec">
+          <span><span class="k">Assignee</span><span class="v">Dan Whitlock</span></span>
+          <span><span class="k">Due</span><span class="v none">None said aloud</span></span>
+          <span><span class="k">Source</span><span class="v">Line 16</span></span>
+        </div>
+      </div>
+    </li>
+
+    <li class="entry">
+      <div class="gutter"><span class="numeral">06</span><span class="leader"></span></div>
+      <div>
+        <div class="entry-top">
+          <div>
+            <h2>Book the go/no-go call for Monday morning</h2>
+            <p class="desc">Maya books the call and sends the invite round this afternoon.</p>
+          </div>
+          <div class="actions">
+            <button class="btn btn-sm">Amend</button>
+            <button class="btn btn-sm btn-void">Void</button>
+          </div>
+        </div>
+        <div class="spec">
+          <span><span class="k">Assignee</span><span class="v">Maya Ellison</span></span>
+          <span><span class="k">Due</span><span class="v">26 Jul 2026</span></span>
+          <span><span class="k">Source</span><span class="v">Line 19</span></span>
+        </div>
+      </div>
+    </li>
+
+  </ul>
+
+  <div class="commit">
+    <div>
+      <h2>Push the sheet</h2>
+      <p>
+        This creates <b>5 issues</b> in <b>Linear · Product</b> and links each Action Point to
+        the issue it became. The one void entry is left behind.
+      </p>
+    </div>
+    <div class="actions">
+      <button class="btn">Void all</button>
+      <button class="btn btn-primary">Push 5 Action Points</button>
+    </div>
+  </div>
+
+  <footer class="foot">
+    <span class="caps">Extraction 4471 · 1 Credit consumed</span>
+    <span class="caps">ActionPoints · 2026</span>
+  </footer>
+</div>
+
+<div class="mockup-nav">
+  BOND <span class="sep">/</span>
+  <a href="bond-home.html">Home</a>
+  <a href="bond-review.html" aria-current="page">Review</a>
+  <span class="sep">·</span>
+  <a href="index.html">All directions</a>
+</div>
+
+</body>
+</html>
