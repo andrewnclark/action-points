@@ -1,4 +1,11 @@
 defmodule ActionPointsWeb.SinkSettingsLive do
+  @moduledoc """
+  Sink Settings: where an account points ActionPoints at its Task Sink. The
+  screen is one panel in three modes — enter a key, pick a team, or look at
+  what is connected — and the lead above it says which moment this is, because
+  "Connect Linear" is a lie on a screen that is already connected.
+  """
+
   use ActionPointsWeb, :live_view
 
   alias ActionPoints.Sinks
@@ -7,99 +14,184 @@ defmodule ActionPointsWeb.SinkSettingsLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="text-center">
-        <.header>
-          Connect Linear
-          <:subtitle>
-            Pushed Action Points become real issues in your Linear workspace
-          </:subtitle>
-        </.header>
-      </div>
+      <Layouts.form_page eyebrow="Task Sink" title={moment(@mode, @connection).title}>
+        <:lead>{moment(@mode, @connection).lead}</:lead>
 
-      <%= case @mode do %>
-        <% :key_entry -> %>
-          <.form for={@key_form} id="sink-key-form" phx-submit="validate_key">
-            <.input
-              field={@key_form[:api_key]}
-              type="password"
-              label="Linear personal API key"
-              autocomplete="off"
-              spellcheck="false"
-              required
-            />
-            <p class="mt-1 text-sm opacity-70">
-              Create one in Linear under Settings &rarr; Security &amp; access &rarr; personal API keys.
-              We check it with Linear before saving anything.
-            </p>
-            <p :if={@flow_error} id="sink-key-error" class="mt-2 text-sm text-error" role="alert">
-              {@flow_error}
-            </p>
-            <div class="mt-4 flex items-center gap-3">
-              <.button id="connect-sink" variant="primary" phx-disable-with="Checking key...">
-                Connect
-              </.button>
-              <.button :if={@connection} id="cancel-replace" type="button" phx-click="cancel_replace">
-                Cancel
-              </.button>
-            </div>
-          </.form>
-        <% :team_pick -> %>
-          <.form for={@team_form} id="sink-team-form" phx-submit="save_team">
-            <p class="mb-2 text-sm">
-              Key looks good. Choose the Linear team new issues will land in:
-            </p>
-            <.input
-              field={@team_form[:team_id]}
-              type="select"
-              label="Linear team"
-              options={Enum.map(@teams, &{&1.name, &1.id})}
-              required
-            />
-            <p :if={@flow_error} id="sink-team-error" class="mt-2 text-sm text-error" role="alert">
-              {@flow_error}
-            </p>
-            <div class="mt-4 flex items-center gap-3">
-              <.button id="save-sink-team" variant="primary" phx-disable-with="Saving...">
-                Save connection
-              </.button>
-              <.button id="cancel-team-pick" type="button" phx-click="cancel_team_pick">
-                Start over
-              </.button>
-            </div>
-          </.form>
-        <% :connected -> %>
-          <div id="sink-connection" class="rounded-lg border border-base-300 p-4 space-y-3">
-            <div class="flex items-center justify-between">
-              <span class="font-semibold">Linear</span>
-              <span class="rounded-full border border-current/30 px-2.5 py-0.5 text-xs font-medium">
-                Connected
-              </span>
-            </div>
-            <dl class="text-sm space-y-1">
-              <div class="flex gap-2">
-                <dt class="opacity-70">API key</dt>
-                <dd id="sink-masked-key" class="font-mono">
-                  &bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;{@connection.api_key_last4}
-                </dd>
+        <%= case @mode do %>
+          <% :key_entry -> %>
+            <.form for={@key_form} id="sink-key-form" phx-submit="validate_key">
+              <.input
+                field={@key_form[:api_key]}
+                type="password"
+                label="Linear personal API key"
+                autocomplete="off"
+                spellcheck="false"
+                required
+              />
+              <p class="mt-1 text-xs text-base-content/65">
+                Create one in Linear under Settings &rarr; Security &amp; access &rarr;
+                personal API keys. We check it with Linear before saving anything.
+              </p>
+
+              <.flow_error :if={@flow_error} id="sink-key-error">{@flow_error}</.flow_error>
+
+              <div class="mt-5 flex flex-wrap items-center gap-2">
+                <button
+                  id="connect-sink"
+                  class="btn btn-primary"
+                  phx-disable-with="Checking the key…"
+                >
+                  Connect
+                </button>
+                <button
+                  :if={@connection}
+                  id="cancel-replace"
+                  type="button"
+                  class="btn btn-ghost text-base-content/70"
+                  phx-click="cancel_replace"
+                >
+                  Cancel
+                </button>
               </div>
-              <div class="flex gap-2">
-                <dt class="opacity-70">Team</dt>
-                <dd id="sink-team-name">{@connection.team_name}</dd>
+            </.form>
+          <% :team_pick -> %>
+            <.form for={@team_form} id="sink-team-form" phx-submit="save_team">
+              <.input
+                field={@team_form[:team_id]}
+                type="select"
+                label="Linear team"
+                options={Enum.map(@teams, &{&1.name, &1.id})}
+                required
+              />
+              <p class="mt-1 text-xs text-base-content/65">
+                You can change the team later by replacing the key.
+              </p>
+
+              <.flow_error :if={@flow_error} id="sink-team-error">{@flow_error}</.flow_error>
+
+              <div class="mt-5 flex flex-wrap items-center gap-2">
+                <button id="save-sink-team" class="btn btn-primary" phx-disable-with="Saving…">
+                  Save connection
+                </button>
+                <button
+                  id="cancel-team-pick"
+                  type="button"
+                  class="btn btn-ghost text-base-content/70"
+                  phx-click="cancel_team_pick"
+                >
+                  Start over
+                </button>
               </div>
-            </dl>
-            <div class="flex items-center gap-3">
-              <.button id="replace-key" phx-click="replace_key">Replace key</.button>
-              <.button
-                id="disconnect-sink"
-                phx-click="disconnect"
-                data-confirm="Disconnect Linear? Pushing will stop working until you reconnect."
-              >
-                Disconnect
-              </.button>
+            </.form>
+          <% :connected -> %>
+            <div id="sink-connection">
+              <div class="flex items-center justify-between gap-4">
+                <span class="font-semibold">Linear</span>
+                <span class="inline-flex items-center gap-2 rounded-full border border-success/40 px-3 py-1 text-[11px] font-medium tracking-[0.07em] text-base-content/65 uppercase">
+                  <span
+                    class="size-1.5 rounded-full bg-success ring-3 ring-success/15"
+                    aria-hidden="true"
+                  /> Connected
+                </span>
+              </div>
+
+              <dl class="mt-5 divide-y divide-base-300/60 border-y border-base-300/60 text-sm">
+                <div class="flex items-center justify-between gap-4 py-3">
+                  <dt class="text-base-content/65">API key</dt>
+                  <dd id="sink-masked-key" class="truncate font-mono">
+                    &bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;{@connection.api_key_last4}
+                  </dd>
+                </div>
+                <div class="flex items-center justify-between gap-4 py-3">
+                  <dt class="text-base-content/65">Team</dt>
+                  <dd id="sink-team-name" class="truncate font-medium">
+                    {@connection.team_name}
+                  </dd>
+                </div>
+              </dl>
+
+              <div class="mt-5 flex flex-wrap items-center gap-2">
+                <button id="replace-key" class="btn btn-soft btn-sm" phx-click="replace_key">
+                  Replace key
+                </button>
+                <button
+                  id="disconnect-sink"
+                  class="btn btn-ghost btn-sm text-base-content/70"
+                  phx-click="disconnect"
+                  data-confirm="Disconnect Linear? You can't Push until you reconnect."
+                >
+                  Disconnect
+                </button>
+              </div>
+
+              <%!-- The question a Disconnect button raises before it is clicked:
+                whether it reaches back into work already Pushed. It does not. --%>
+              <p class="mt-4 text-xs text-base-content/65">
+                Disconnecting stops Pushes. Issues already created in Linear stay
+                where they are.
+              </p>
             </div>
-          </div>
-      <% end %>
+        <% end %>
+
+        <:footer>
+          Your email and Credits are in <.link
+            navigate={~p"/users/settings"}
+            class="text-accent hover:underline"
+            phx-no-format
+          >Settings</.link>.
+        </:footer>
+      </Layouts.form_page>
     </Layouts.app>
+    """
+  end
+
+  # The four moments this screen has, each with the line that names it. Entering
+  # a key for the first time and replacing a working one are the same :key_entry
+  # form and mean opposite things, so they are separate moments here — the panel
+  # can't tell them apart, but the reader must.
+  defp moment(:connected, _connection),
+    do: %{
+      title: "Linear is connected.",
+      lead:
+        "Accepted Action Points Push straight into your team. " <>
+          "Nothing is created there until you Push."
+    }
+
+  defp moment(:team_pick, _connection),
+    do: %{
+      title: "Choose a team.",
+      lead: "That key works. Pushed Action Points land in the team you pick."
+    }
+
+  defp moment(:key_entry, nil),
+    do: %{
+      title: "Connect Linear.",
+      lead: "Linear is your Task Sink: the Action Points you Push become issues in it."
+    }
+
+  defp moment(:key_entry, _connection),
+    do: %{
+      title: "Replace your key.",
+      lead:
+        "We check the new key with Linear first. " <>
+          "Your current connection keeps working until it does."
+    }
+
+  # Whatever went wrong between here and Linear, said in place under the field
+  # that caused it — the same error surface the rest of the app uses.
+  attr :id, :string, required: true
+  slot :inner_block, required: true
+
+  defp flow_error(assigns) do
+    ~H"""
+    <div
+      id={@id}
+      class="mt-5 flex gap-3 rounded-box border border-error/40 bg-error/10 p-4"
+      role="alert"
+    >
+      <.icon name="hero-exclamation-triangle" class="size-5 shrink-0 text-error" />
+      <p class="text-base-content/70">{render_slot(@inner_block)}</p>
+    </div>
     """
   end
 
@@ -109,7 +201,7 @@ defmodule ActionPointsWeb.SinkSettingsLive do
 
     {:ok,
      socket
-     |> assign(:page_title, "Connect Linear")
+     |> assign(:page_title, "Task Sink")
      |> assign(:connection, connection)
      |> assign(:mode, if(connection, do: :connected, else: :key_entry))
      |> reset_flow()}
@@ -122,7 +214,7 @@ defmodule ActionPointsWeb.SinkSettingsLive do
     case Sinks.validate_key(api_key) do
       {:ok, []} ->
         {:noreply,
-         assign(socket, :flow_error, "That key works, but it has no teams to push issues into.")}
+         assign(socket, :flow_error, "That key works, but it has no teams to Push into.")}
 
       {:ok, teams} ->
         {:noreply,
@@ -188,7 +280,7 @@ defmodule ActionPointsWeb.SinkSettingsLive do
      |> assign(:connection, nil)
      |> assign(:mode, :key_entry)
      |> reset_flow()
-     |> put_flash(:info, "Linear disconnected.")}
+     |> put_flash(:info, "Linear disconnected. You can't Push until you reconnect.")}
   end
 
   defp reset_flow(socket) do

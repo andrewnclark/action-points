@@ -10,7 +10,7 @@ defmodule ActionPointsWeb.UserLive.Confirmation do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <%!-- The last click of signing up, and the first of coming back — the same
       link, two different moments, so the page says which one this is. --%>
-      <Layouts.auth_page
+      <Layouts.form_page
         eyebrow={if @user.confirmed_at, do: "Login link", else: "New account"}
         title={if @user.confirmed_at, do: "Welcome back.", else: "Confirm your account."}
       >
@@ -91,7 +91,7 @@ defmodule ActionPointsWeb.UserLive.Confirmation do
           Logging in by emailed link is the default. If you'd rather type a password,
           set one in Settings.
         </p>
-      </Layouts.auth_page>
+      </Layouts.form_page>
     </Layouts.app>
     """
   end

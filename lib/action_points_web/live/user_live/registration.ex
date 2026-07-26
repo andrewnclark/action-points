@@ -13,7 +13,7 @@ defmodule ActionPointsWeb.UserLive.Registration do
       has just been stopped at Push is here for their Review, and one who came
       off the landing page is here for the Free Meeting. The page leads with
       whichever it is. --%>
-      <Layouts.auth_page
+      <Layouts.form_page
         eyebrow={if @review_kept_count, do: "Review saved", else: "Account"}
         title={if @pushable?, do: "Create an account to Push.", else: "Create an account."}
       >
@@ -57,7 +57,7 @@ defmodule ActionPointsWeb.UserLive.Registration do
             class="text-accent hover:underline"
           >Log in</.link>.
         </:footer>
-      </Layouts.auth_page>
+      </Layouts.form_page>
     </Layouts.app>
     """
   end

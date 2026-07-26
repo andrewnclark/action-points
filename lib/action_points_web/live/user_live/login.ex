@@ -10,7 +10,7 @@ defmodule ActionPointsWeb.UserLive.Login do
       <%!-- Asking for a link ends on a screen, not on a toast: the visitor has
       to leave for their inbox and come back, and a message that evaporates on
       the way is no use to them there. --%>
-      <Layouts.auth_page eyebrow="Login link" title="Check your email.">
+      <Layouts.form_page eyebrow="Login link" title="Check your email.">
         <:lead>
           <%= if @magic_link == :sent do %>
             Your account is created. The link logs you in — it works once.
@@ -42,7 +42,7 @@ defmodule ActionPointsWeb.UserLive.Login do
             >use a different address</.link>.
           </p>
         </div>
-      </Layouts.auth_page>
+      </Layouts.form_page>
     </Layouts.app>
     """
   end
@@ -52,7 +52,7 @@ defmodule ActionPointsWeb.UserLive.Login do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <%!-- Re-authenticating is not logging in: the reader is already inside and
       is being asked to prove it before changing account details. --%>
-      <Layouts.auth_page
+      <Layouts.form_page
         eyebrow={if @current_scope, do: "Confirm it's you", else: "Account"}
         title={if @current_scope, do: "Log in again.", else: "Log in."}
       >
@@ -146,7 +146,7 @@ defmodule ActionPointsWeb.UserLive.Login do
           </.link>
           — it comes with a Free Meeting.
         </:footer>
-      </Layouts.auth_page>
+      </Layouts.form_page>
     </Layouts.app>
     """
   end
