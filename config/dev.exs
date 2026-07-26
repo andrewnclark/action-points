@@ -64,6 +64,10 @@ config :action_points, ActionPointsWeb.Endpoint,
     ]
   ]
 
+# Static dev-only key for secrets-at-rest encryption (Linear API keys).
+# Production takes its key from SINK_ENCRYPTION_KEY in runtime.exs.
+config :action_points, ActionPoints.Vault, key: "6VEbG1pjaSQV8skhZV3jfmd+hQmbYjtm/Y6gXr8o57U="
+
 # Enable dev routes for dashboard and mailbox
 config :action_points, dev_routes: true
 

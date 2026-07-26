@@ -50,6 +50,10 @@ defmodule ActionPointsWeb.Router do
       on_mount: [{ActionPointsWeb.UserAuth, :require_authenticated}] do
       live "/users/settings", UserLive.Settings, :edit
       live "/users/settings/confirm-email/:token", UserLive.Settings, :confirm_email
+
+      # Connecting a Task Sink needs an account (the key is stored against the
+      # user) but not sudo mode — the page never renders the key back.
+      live "/settings/sink", SinkSettingsLive
     end
 
     post "/users/update-password", UserSessionController, :update_password
