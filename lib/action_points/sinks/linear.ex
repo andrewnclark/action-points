@@ -33,9 +33,12 @@ defmodule ActionPoints.Sinks.Linear do
 
   @impl true
   def list_users(credentials) do
-    case query(credentials, "{ users { nodes { id name displayName } } }", %{}) do
+    case query(credentials, "{ users { nodes { id name displayName active } } }", %{}) do
       {:ok, %{"users" => %{"nodes" => nodes}}} ->
-        {:ok, Enum.map(nodes, &%{id: &1["id"], name: &1["displayName"] || &1["name"]})}
+        {:ok,
+         nodes
+         |> Enum.filter(& &1["active"])
+         |> Enum.map(&%{id: &1["id"], name: &1["name"], handle: &1["displayName"]})}
 
       {:ok, _data} ->
         {:error, :api_error}

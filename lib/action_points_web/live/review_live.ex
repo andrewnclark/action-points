@@ -113,6 +113,22 @@ defmodule ActionPointsWeb.ReviewLive do
               </span>
             </div>
 
+            <%!-- A failed member fetch degrades the picker, not the Review: the
+            guesses still show as text, but nothing is guessed silently in
+            their place (ADR-0007). --%>
+            <div
+              :if={@assignee_degraded?}
+              id="assignee-degraded-notice"
+              class="mb-4 flex gap-3 rounded-box border border-warning/40 bg-warning/10 p-4"
+              role="alert"
+            >
+              <.icon name="hero-exclamation-triangle" class="size-5 shrink-0 text-warning" />
+              <p class="text-base-content/70">
+                Linear's member list couldn't be reached, so guessed names are shown as text below.
+                Pushing now leaves them unassigned — reload once Linear is reachable to resolve them.
+              </p>
+            </div>
+
             <div
               :if={@push_failure}
               id="push-failure"
@@ -202,7 +218,11 @@ defmodule ActionPointsWeb.ReviewLive do
                       label="Description"
                     />
                     <div class="grid gap-x-3 sm:grid-cols-2">
+                      <%!-- Once the sink is live, the assignee is set from the
+                      picker on the card itself, not here — that picker is a
+                      real member, and this field would only be raw text. --%>
                       <.input
+                        :if={not @sink_live?}
                         field={@edit_form[:assignee_guess]}
                         type="text"
                         label="Assignee"
@@ -286,10 +306,12 @@ defmodule ActionPointsWeb.ReviewLive do
                   >
                     {action_point.description}
                   </p>
-                  <div class="mt-3 flex flex-wrap gap-1.5">
-                    <.chip :if={action_point.assignee_guess} role="assignee" icon="hero-user-micro">
-                      {action_point.assignee_guess}
-                    </.chip>
+                  <div class="mt-3 flex flex-wrap items-center gap-1.5">
+                    <.assignee_field
+                      action_point={action_point}
+                      sink_users={@sink_users}
+                      pickable={@sink_live? and is_nil(action_point.sink_issue_id)}
+                    />
                     <.chip
                       :if={action_point.due_date}
                       role="due-date"
@@ -400,6 +422,68 @@ defmodule ActionPointsWeb.ReviewLive do
     """
   end
 
+  # One Action Point's assignee: a live picker once the sink is connected and
+  # reachable and the Action Point isn't pushed yet, otherwise a static chip
+  # — the resolved member if Review has settled one, the raw guess if it
+  # never got the chance to (no connection, or a degraded fetch), or nothing
+  # at all when there was never a guess. Nothing is guessed silently: an
+  # ambiguous or unmatched guess reads as "Unassigned" once resolved, never
+  # as the raw name pretending to be a real pick.
+  attr :action_point, :map, required: true
+  attr :sink_users, :list, required: true
+  attr :pickable, :boolean, required: true
+
+  defp assignee_field(assigns) do
+    ~H"""
+    <%= cond do %>
+      <% @pickable -> %>
+        <%!-- phx-value-id lives on the form, not the select: LiveView only
+        merges phx-value-* for a `change` targeting a form element, not a
+        bare input. --%>
+        <form
+          id={"action-point-#{@action_point.id}-assignee-form"}
+          phx-change="pick_assignee"
+          phx-value-id={@action_point.id}
+          class="inline-flex items-center gap-1.5"
+        >
+          <select
+            id={"action-point-#{@action_point.id}-assignee"}
+            name="sink_user_id"
+            data-role="assignee-picker"
+            class="select select-xs w-auto max-w-[16rem]"
+          >
+            <option value="" selected={is_nil(@action_point.assignee_sink_user_id)}>
+              Unassigned — pick a member
+            </option>
+            <option
+              :for={user <- @sink_users}
+              value={user.id}
+              selected={@action_point.assignee_sink_user_id == user.id}
+            >
+              {user.name} (@{user.handle})
+            </option>
+          </select>
+          <span
+            :if={@action_point.assignee_resolution == :suggested}
+            data-role="assignee-suggested"
+            class="rounded-[3px] bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold tracking-[0.05em] text-primary uppercase"
+          >
+            Suggested
+          </span>
+        </form>
+      <% @action_point.assignee_resolution && @action_point.assignee_sink_user_id -> %>
+        <.chip role="assignee" icon="hero-user-micro">
+          {@action_point.assignee_display_name}
+        </.chip>
+      <% @action_point.assignee_resolution -> %>
+        <.chip role="assignee" icon="hero-user-micro" empty>Unassigned</.chip>
+      <% @action_point.assignee_guess -> %>
+        <.chip role="assignee" icon="hero-user-micro">{@action_point.assignee_guess}</.chip>
+      <% true -> %>
+    <% end %>
+    """
+  end
+
   defp editing?(nil, _action_point), do: false
   defp editing?(editing, action_point), do: editing.id == action_point.id
 
@@ -429,7 +513,7 @@ defmodule ActionPointsWeb.ReviewLive do
 
     extraction = Meetings.get_extraction!(id, session["anon_session_token"])
 
-    {:ok, assign_extraction(socket, extraction)}
+    {:ok, assign_resolved_extraction(socket, connected?(socket), extraction)}
   end
 
   @impl true
@@ -479,6 +563,15 @@ defmodule ActionPointsWeb.ReviewLive do
              |> stream_insert(:action_points, editing)}
         end
     end
+  end
+
+  def handle_event("pick_assignee", %{"id" => id, "sink_user_id" => ""}, socket) do
+    {:noreply, set_assignee(socket, id, nil)}
+  end
+
+  def handle_event("pick_assignee", %{"id" => id, "sink_user_id" => sink_user_id}, socket) do
+    sink_user = Enum.find(socket.assigns.sink_users, &(&1.id == sink_user_id))
+    {:noreply, set_assignee(socket, id, sink_user)}
   end
 
   def handle_event("push", _params, socket) do
@@ -579,7 +672,7 @@ defmodule ActionPointsWeb.ReviewLive do
     {:noreply,
      socket
      |> refresh_credit_balance()
-     |> assign_extraction(refetch_extraction(socket))}
+     |> assign_resolved_extraction(true, refetch_extraction(socket))}
   end
 
   defp refresh_credit_balance(socket) do
@@ -609,6 +702,57 @@ defmodule ActionPointsWeb.ReviewLive do
       |> Meetings.set_action_point_status(status)
 
     refresh_action_point(socket, action_point)
+  end
+
+  defp set_assignee(socket, id, sink_user) do
+    action_point =
+      id
+      |> Meetings.get_action_point!(socket.assigns.extraction.session_token)
+      |> Meetings.set_action_point_assignee(sink_user)
+
+    refresh_action_point(socket, action_point)
+  end
+
+  # Resolves every unresolved Action Point's assignee guess against the
+  # scoped user's Task Sink (ADR-0007) — only while the socket is actually
+  # connected, so the static render before LiveView takes over never makes a
+  # sink call. Only a succeeded Extraction with Action Points has anything to
+  # resolve. Assigns the outcome and the (possibly freshly reloaded)
+  # Extraction in one step, since mount and the extraction-updated PubSub
+  # handler both need to do exactly this.
+  defp assign_resolved_extraction(
+         socket,
+         true,
+         %{status: :succeeded, action_points: [_ | _]} = extraction
+       ) do
+    case Sinks.resolve_assignees(socket.assigns.current_scope, extraction.action_points) do
+      {:ok, sink_users} ->
+        extraction = Meetings.get_extraction!(extraction.id, extraction.session_token)
+
+        socket
+        |> assign(:sink_users, sink_users)
+        |> assign(:sink_live?, true)
+        |> assign(:assignee_degraded?, false)
+        |> assign_extraction(extraction)
+
+      {:error, :not_connected} ->
+        assign_unresolved_extraction(socket, extraction, false)
+
+      {:error, :unavailable} ->
+        assign_unresolved_extraction(socket, extraction, true)
+    end
+  end
+
+  defp assign_resolved_extraction(socket, _connected?, extraction) do
+    assign_unresolved_extraction(socket, extraction, false)
+  end
+
+  defp assign_unresolved_extraction(socket, extraction, degraded?) do
+    socket
+    |> assign(:sink_users, [])
+    |> assign(:sink_live?, false)
+    |> assign(:assignee_degraded?, degraded?)
+    |> assign_extraction(extraction)
   end
 
   # Patches one card in place and recounts — a full re-stream would wipe

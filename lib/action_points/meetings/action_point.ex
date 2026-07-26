@@ -15,6 +15,16 @@ defmodule ActionPoints.Meetings.ActionPoint do
     field :due_date, :date
     field :status, Ecto.Enum, values: [:accepted, :rejected], default: :accepted
 
+    # The assignee guess resolved to a real Task Sink member (ADR-0007):
+    # `assignee_resolution` is nil until Review has looked at this row once,
+    # and stays whatever it settled on after that — a later Review reopening
+    # never overwrites an explicit pick or an explicit clear. `:mapped` and
+    # `:suggested` are set automatically from a mapping or an unambiguous
+    # name match; `:manual` and `:unassigned` come from the user.
+    field :assignee_sink_user_id, :string
+    field :assignee_display_name, :string
+    field :assignee_resolution, Ecto.Enum, values: [:mapped, :suggested, :manual, :unassigned]
+
     # The created-issue reference, set when this Action Point is pushed to the
     # Task Sink. Its presence is what makes a Push retry skip this row.
     field :sink_issue_id, :string

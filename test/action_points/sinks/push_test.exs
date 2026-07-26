@@ -4,7 +4,9 @@ defmodule ActionPoints.Sinks.PushTest do
   alias ActionPoints.Accounts.Scope
   alias ActionPoints.AccountsFixtures
   alias ActionPoints.Meetings
+  alias ActionPoints.Repo
   alias ActionPoints.Sinks
+  alias ActionPoints.Sinks.AssigneeMapping
 
   @api_key "lin_api_secret_key_abcd"
   @session_token "push-test-session"
@@ -78,58 +80,113 @@ defmodule ActionPoints.Sinks.PushTest do
            ] = sink_pushes()
   end
 
-  test "matches assignee guesses to sink users by full name or unique first name", %{
+  test "Push sends exactly the assignee Review resolved and does no matching of its own", %{
     scope: scope
   } do
+    # Scripted so a Push that tried to match by name would find a match and
+    # get this wrong — proving Push never looks at the sink's user list.
     Application.put_env(:action_points, :fake_task_sink,
-      users:
-        {:ok,
-         [
-           %{id: "u-priya", name: "Priya Sharma"},
-           %{id: "u-tom", name: "Tom Nook"},
-           %{id: "u-tomas", name: "Tomas Riley"}
-         ]}
+      users: {:ok, [%{id: "u-priya", name: "Priya Sharma", handle: "priya"}]}
     )
 
     extraction = create_review(@two_action_points)
+    [first, second] = extraction.action_points
+
+    Meetings.set_action_point_assignee(first, %{id: "u-other", name: "Someone Else"})
+    Meetings.set_action_point_assignee(second, nil)
 
     {:ok, _pushed} = Sinks.push(scope, extraction)
 
     assert [
-             {_team1, %{title: "Send the Q3 report to finance", assignee_id: "u-priya"}},
-             {_team2, %{title: "Book the offsite venue", assignee_id: "u-tom"}}
+             {_, %{title: "Send the Q3 report to finance", assignee_id: "u-other"}},
+             {_, %{title: "Book the offsite venue", assignee_id: nil}}
            ] = sink_pushes()
   end
 
-  test "an ambiguous or unmatched guess is left unassigned, never mis-assigned", %{scope: scope} do
-    Application.put_env(:action_points, :fake_task_sink,
-      users: {:ok, [%{id: "u-tom-n", name: "Tom Nook"}, %{id: "u-tom-c", name: "Tom Chen"}]}
-    )
+  test "Pushing a resolved pick saves it as an Assignee Mapping, keyed by the guessed name", %{
+    scope: scope
+  } do
+    extraction = create_review(@two_action_points)
+    [first, _second] = extraction.action_points
 
+    Meetings.set_action_point_assignee(first, %{id: "u-priya", name: "Priya Sharma"})
+
+    {:ok, _pushed} = Sinks.push(scope, extraction)
+
+    connection = Sinks.get_connection(scope)
+
+    assert %AssigneeMapping{sink_user_id: "u-priya", display_name: "Priya Sharma"} =
+             Repo.get_by!(AssigneeMapping,
+               sink_connection_id: connection.id,
+               normalized_guess: "priya"
+             )
+  end
+
+  test "Pushing again with the same pick does not duplicate the mapping", %{scope: scope} do
+    extraction = create_review(@two_action_points)
+    [first, _second] = extraction.action_points
+    Meetings.set_action_point_assignee(first, %{id: "u-priya", name: "Priya Sharma"})
+    {:ok, _pushed} = Sinks.push(scope, extraction)
+
+    connection = Sinks.get_connection(scope)
+    assert Repo.aggregate(AssigneeMapping, :count) == 1
+
+    # A second Review with the same name should resolve to the same mapping,
+    # and Pushing it again must not create a second row for "priya".
+    extraction2 = create_review([%{title: "Follow up with finance", assignee_guess: "Priya"}])
+    [third] = extraction2.action_points
+    Meetings.set_action_point_assignee(third, %{id: "u-priya", name: "Priya Sharma"})
+    {:ok, _pushed} = Sinks.push(scope, extraction2)
+
+    assert Repo.aggregate(AssigneeMapping, :count) == 1
+
+    assert %AssigneeMapping{sink_user_id: "u-priya"} =
+             Repo.get_by!(AssigneeMapping,
+               sink_connection_id: connection.id,
+               normalized_guess: "priya"
+             )
+  end
+
+  test "Pushing a different pick for an already-mapped name repoints the mapping", %{
+    scope: scope
+  } do
+    extraction = create_review(@two_action_points)
+    [first, _second] = extraction.action_points
+    Meetings.set_action_point_assignee(first, %{id: "u-priya", name: "Priya Sharma"})
+    {:ok, _pushed} = Sinks.push(scope, extraction)
+
+    extraction2 = create_review([%{title: "Follow up with finance", assignee_guess: "Priya"}])
+    [third] = extraction2.action_points
+    Meetings.set_action_point_assignee(third, %{id: "u-priya-two", name: "Priya Patel"})
+    {:ok, _pushed} = Sinks.push(scope, extraction2)
+
+    connection = Sinks.get_connection(scope)
+    assert Repo.aggregate(AssigneeMapping, :count) == 1
+
+    assert %AssigneeMapping{sink_user_id: "u-priya-two", display_name: "Priya Patel"} =
+             Repo.get_by!(AssigneeMapping,
+               sink_connection_id: connection.id,
+               normalized_guess: "priya"
+             )
+  end
+
+  test "Pushing a deliberately unassigned Action Point saves no mapping", %{scope: scope} do
+    extraction = create_review(@two_action_points)
+    [first, _second] = extraction.action_points
+    Meetings.set_action_point_assignee(first, nil)
+
+    {:ok, _pushed} = Sinks.push(scope, extraction)
+
+    assert Repo.aggregate(AssigneeMapping, :count) == 0
+  end
+
+  test "Pushing an Action Point with no guess saves no mapping", %{scope: scope} do
     extraction =
-      create_review([
-        %{title: "Book the offsite venue", assignee_guess: "Tom"},
-        %{title: "Send the Q3 report to finance", assignee_guess: "Priya"},
-        %{title: "Circulate the meeting notes", assignee_guess: nil}
-      ])
+      create_review([%{title: "Circulate the meeting notes", assignee_guess: nil}])
 
     {:ok, _pushed} = Sinks.push(scope, extraction)
 
-    assert [
-             {_, %{assignee_id: nil}},
-             {_, %{assignee_id: nil}},
-             {_, %{assignee_id: nil}}
-           ] = sink_pushes()
-  end
-
-  test "when the sink's user list is unavailable, everything pushes unassigned", %{scope: scope} do
-    Application.put_env(:action_points, :fake_task_sink, users: {:error, :unavailable})
-
-    extraction = create_review(@two_action_points)
-
-    assert {:ok, pushed} = Sinks.push(scope, extraction)
-    assert length(pushed) == 2
-    assert [{_, %{assignee_id: nil}}, {_, %{assignee_id: nil}}] = sink_pushes()
+    assert Repo.aggregate(AssigneeMapping, :count) == 0
   end
 
   test "rejected Action Points are never pushed", %{scope: scope} do
