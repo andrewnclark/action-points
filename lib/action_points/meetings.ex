@@ -310,6 +310,40 @@ defmodule ActionPoints.Meetings do
   end
 
   @doc """
+  Persists a resolved assignee onto an Action Point — from an Assignee
+  Mapping hit, an unambiguous name-match suggestion, or the user's own pick
+  or clear (ADR-0007). `sink_user` is `%{id:, name:}` from the live Task Sink
+  member list, or `nil` for a deliberately unassigned pick. Never touches
+  `assignee_guess`: it stays the model's raw output and the mapping key.
+
+  Sets the fields directly rather than through a cast changeset — they are
+  never user input, only ever this module's own resolved values.
+  """
+  def resolve_action_point_assignee(%ActionPoint{} = action_point, resolution, sink_user)
+      when resolution in [:mapped, :suggested, :manual, :unassigned] do
+    action_point
+    |> Ecto.Changeset.change(
+      assignee_resolution: resolution,
+      assignee_sink_user_id: sink_user && sink_user.id,
+      assignee_display_name: sink_user && sink_user.name
+    )
+    |> Repo.update!()
+  end
+
+  @doc """
+  Applies the user's own assignee pick during Review — `sink_user` is
+  `%{id:, name:}` from the live Task Sink member list, or `nil` to
+  deliberately push this Action Point unassigned.
+  """
+  def set_action_point_assignee(%ActionPoint{} = action_point, nil) do
+    resolve_action_point_assignee(action_point, :unassigned, nil)
+  end
+
+  def set_action_point_assignee(%ActionPoint{} = action_point, %{} = sink_user) do
+    resolve_action_point_assignee(action_point, :manual, sink_user)
+  end
+
+  @doc """
   Counts the Action Points a Push would create right now — accepted in the
   Review and not yet pushed. This is the number the Push button promises.
   """

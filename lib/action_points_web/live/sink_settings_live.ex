@@ -133,6 +133,133 @@ defmodule ActionPointsWeb.SinkSettingsLive do
                 where they are.
               </p>
             </div>
+
+            <div id="assignee-mappings" class="mt-8">
+              <div class="flex items-center justify-between gap-4">
+                <h2 class="text-sm font-semibold">Assignee Mappings</h2>
+                <button
+                  :if={is_nil(@mapping_sink_error)}
+                  id="add-mapping-toggle"
+                  type="button"
+                  class="btn btn-soft btn-xs"
+                  phx-click="toggle_add_mapping"
+                >
+                  <.icon name="hero-plus-micro" class="size-3.5" />
+                  {if @adding_mapping?, do: "Cancel", else: "Add mapping"}
+                </button>
+              </div>
+              <%!-- A mapping is usually born at Push, without the user ever
+              visiting this screen — this line says so, rather than letting an
+              empty table read as broken. --%>
+              <p class="mt-1 text-xs text-base-content/65">
+                A name Review resolves once resolves the same way in every later meeting.
+                They're usually created by Pushing, not here.
+              </p>
+
+              <p :if={@mapping_sink_error} class="mt-3 text-xs text-warning">
+                Linear's member list couldn't be reached, so mappings can't be added or changed
+                right now.
+              </p>
+
+              <.flow_error :if={@mapping_flow_error} id="mapping-error">
+                {@mapping_flow_error}
+              </.flow_error>
+
+              <.form
+                :if={@adding_mapping?}
+                for={@add_mapping_form}
+                id="add-mapping-form"
+                phx-submit="add_mapping"
+                class="mt-3 flex flex-wrap items-end gap-2 rounded-box border border-base-300 bg-base-200 p-3"
+              >
+                <.input
+                  field={@add_mapping_form[:guess]}
+                  type="text"
+                  label="Guessed name"
+                  placeholder="Bob"
+                />
+                <.input
+                  field={@add_mapping_form[:sink_user_id]}
+                  type="select"
+                  label="Member"
+                  prompt="Pick a member"
+                  options={sink_user_options(@mapping_sink_users)}
+                />
+                <button id="save-mapping" class="btn btn-primary btn-xs">Save</button>
+              </.form>
+
+              <ul
+                id="mapping-list"
+                phx-update="stream"
+                class="mt-3 divide-y divide-base-300/60 border-y border-base-300/60 text-sm"
+              >
+                <li id="no-mappings" class="hidden py-3 text-base-content/65 only:block">
+                  No Assignee Mappings yet.
+                </li>
+                <li
+                  :for={{dom_id, mapping} <- @streams.assignee_mappings}
+                  id={dom_id}
+                  class="flex items-center justify-between gap-3 py-2.5"
+                >
+                  <% edit_form = to_form(%{"sink_user_id" => mapping.sink_user_id}, as: :mapping) %>
+                  <%= if @editing_mapping_id == mapping.id do %>
+                    <.form
+                      for={edit_form}
+                      id={"edit-mapping-#{mapping.id}"}
+                      phx-submit="save_mapping_edit"
+                      phx-value-id={mapping.id}
+                      class="flex flex-1 flex-wrap items-end gap-2"
+                    >
+                      <span class="truncate font-medium">{mapping.normalized_guess}</span>
+                      <.input
+                        field={edit_form[:sink_user_id]}
+                        type="select"
+                        class="select select-xs w-auto"
+                        options={sink_user_options(@mapping_sink_users)}
+                      />
+                      <button class="btn btn-primary btn-xs">Save</button>
+                      <button
+                        id={"#{dom_id}-cancel"}
+                        type="button"
+                        class="btn btn-ghost btn-xs"
+                        phx-click="cancel_mapping_edit"
+                        phx-value-id={mapping.id}
+                      >
+                        Cancel
+                      </button>
+                    </.form>
+                  <% else %>
+                    <div class="min-w-0">
+                      <p class="truncate font-medium">{mapping.normalized_guess}</p>
+                      <p class="truncate text-base-content/65">
+                        {mapping.display_name}<span :if={mapping.handle}>(@{mapping.handle})</span>
+                      </p>
+                    </div>
+                    <div class="flex shrink-0 gap-1">
+                      <button
+                        id={"#{dom_id}-edit"}
+                        type="button"
+                        class="btn btn-ghost btn-xs"
+                        phx-click="edit_mapping"
+                        phx-value-id={mapping.id}
+                        disabled={not is_nil(@mapping_sink_error)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        id={"#{dom_id}-delete"}
+                        type="button"
+                        class="btn btn-ghost btn-xs text-error"
+                        phx-click="delete_mapping"
+                        phx-value-id={mapping.id}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  <% end %>
+                </li>
+              </ul>
+            </div>
         <% end %>
 
         <:footer>
@@ -206,6 +333,12 @@ defmodule ActionPointsWeb.SinkSettingsLive do
      |> assign(:page_title, "Task Sink")
      |> assign(:connection, connection)
      |> assign(:mode, if(connection, do: :connected, else: :key_entry))
+     |> assign_mapping_sink_users()
+     |> refresh_mappings()
+     |> assign(:adding_mapping?, false)
+     |> assign(:editing_mapping_id, nil)
+     |> assign(:mapping_flow_error, nil)
+     |> assign(:add_mapping_form, to_form(%{"guess" => "", "sink_user_id" => ""}, as: :mapping))
      |> reset_flow()}
   end
 
@@ -249,6 +382,8 @@ defmodule ActionPointsWeb.SinkSettingsLive do
              socket
              |> assign(:connection, Sinks.get_connection(socket.assigns.current_scope))
              |> assign(:mode, :connected)
+             |> assign_mapping_sink_users()
+             |> refresh_mappings()
              |> reset_flow()
              |> put_flash(
                :info,
@@ -281,8 +416,127 @@ defmodule ActionPointsWeb.SinkSettingsLive do
      socket
      |> assign(:connection, nil)
      |> assign(:mode, :key_entry)
+     |> assign_mapping_sink_users()
+     |> refresh_mappings()
      |> reset_flow()
      |> put_flash(:info, "Linear disconnected. You can't Push until you reconnect.")}
+  end
+
+  def handle_event("toggle_add_mapping", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:adding_mapping?, not socket.assigns.adding_mapping?)
+     |> assign(:mapping_flow_error, nil)
+     |> assign(:add_mapping_form, to_form(%{"guess" => "", "sink_user_id" => ""}, as: :mapping))}
+  end
+
+  def handle_event("add_mapping", %{"mapping" => params}, socket) do
+    guess = params["guess"] |> to_string() |> String.trim()
+    sink_user = Enum.find(socket.assigns.mapping_sink_users, &(&1.id == params["sink_user_id"]))
+
+    case {guess, sink_user} do
+      {"", _} ->
+        {:noreply, assign(socket, :mapping_flow_error, "Enter a guessed name.")}
+
+      {_guess, nil} ->
+        {:noreply, assign(socket, :mapping_flow_error, "Pick a member.")}
+
+      {guess, sink_user} ->
+        {:ok, _mapping} =
+          Sinks.put_assignee_mapping(socket.assigns.current_scope, guess, sink_user)
+
+        {:noreply,
+         socket
+         |> assign(:adding_mapping?, false)
+         |> assign(:mapping_flow_error, nil)
+         |> refresh_mappings()
+         |> put_flash(:info, "Mapped \"#{guess}\" to #{sink_user.name}.")}
+    end
+  end
+
+  def handle_event("edit_mapping", %{"id" => id}, socket) do
+    mapping = fetch_mapping!(socket, id)
+
+    # A stream item only re-renders when re-inserted (AGENTS.md) — changing
+    # `editing_mapping_id` alone would leave this row showing its old markup.
+    {:noreply,
+     socket
+     |> assign(:editing_mapping_id, mapping.id)
+     |> assign(:mapping_flow_error, nil)
+     |> stream_insert(:assignee_mappings, mapping)}
+  end
+
+  def handle_event("cancel_mapping_edit", %{"id" => id}, socket) do
+    mapping = fetch_mapping!(socket, id)
+
+    {:noreply,
+     socket
+     |> assign(:editing_mapping_id, nil)
+     |> stream_insert(:assignee_mappings, mapping)}
+  end
+
+  def handle_event(
+        "save_mapping_edit",
+        %{"id" => id, "mapping" => %{"sink_user_id" => sink_user_id}},
+        socket
+      ) do
+    case Enum.find(socket.assigns.mapping_sink_users, &(&1.id == sink_user_id)) do
+      nil ->
+        {:noreply, assign(socket, :mapping_flow_error, "Pick a member.")}
+
+      sink_user ->
+        mapping = fetch_mapping!(socket, id)
+        {:ok, _mapping} = Sinks.update_assignee_mapping(mapping, sink_user)
+
+        {:noreply,
+         socket
+         |> assign(:editing_mapping_id, nil)
+         |> assign(:mapping_flow_error, nil)
+         |> refresh_mappings()
+         |> put_flash(:info, "Updated the mapping for \"#{mapping.normalized_guess}\".")}
+    end
+  end
+
+  def handle_event("delete_mapping", %{"id" => id}, socket) do
+    mapping = fetch_mapping!(socket, id)
+    {:ok, _mapping} = Sinks.delete_assignee_mapping(mapping)
+
+    {:noreply,
+     socket
+     |> stream_delete(:assignee_mappings, mapping)
+     |> put_flash(:info, "Removed the mapping for \"#{mapping.normalized_guess}\".")}
+  end
+
+  # The live member list backing the mapping pickers — fetched once per
+  # connection change, not on every render, since Assignee Mappings only need
+  # it while this screen is open (Review does its own live fetch, ADR-0007).
+  defp assign_mapping_sink_users(socket) do
+    case socket.assigns.connection && Sinks.list_sink_users(socket.assigns.current_scope) do
+      {:ok, users} ->
+        socket |> assign(:mapping_sink_users, users) |> assign(:mapping_sink_error, nil)
+
+      {:error, reason} ->
+        socket |> assign(:mapping_sink_users, []) |> assign(:mapping_sink_error, reason)
+
+      nil ->
+        socket |> assign(:mapping_sink_users, []) |> assign(:mapping_sink_error, nil)
+    end
+  end
+
+  defp refresh_mappings(socket) do
+    stream(socket, :assignee_mappings, Sinks.list_assignee_mappings(socket.assigns.current_scope),
+      reset: true
+    )
+  end
+
+  defp fetch_mapping!(socket, id) do
+    Sinks.get_assignee_mapping!(socket.assigns.current_scope, id)
+  end
+
+  # Select options for a mapping's target member — the same list, shaped the
+  # same way, for both the add form and each row's edit form.
+  defp sink_user_options(sink_users) do
+    Enum.map(sink_users, &{"#{&1.name} (@#{&1.handle})", &1.id})
   end
 
   defp reset_flow(socket) do
