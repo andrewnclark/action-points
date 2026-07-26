@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ActionPoints facelift — design directions</title>
+<style>
+  /* Deliberately neutral chrome: this chooser must not flatter any one
+     direction. Grey, system type, no personality of its own. */
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #131316; color: #e8e8ea;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 15px; line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 28px; }
+
+  header { border-bottom: 1px solid #26262b; padding: 44px 0 30px; }
+  h1 { margin: 0; font-size: 28px; letter-spacing: -0.02em; font-weight: 650; }
+  header p { margin: 10px 0 0; max-width: 78ch; color: #9c9ca4; }
+  header .meta {
+    margin-top: 16px; font: 500 11px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: .1em; text-transform: uppercase; color: #6e6e78;
+  }
+
+  .verdict {
+    margin-top: 20px; border: 1px solid #2f4a38; border-radius: 8px; background: #16211a;
+    padding: 14px 18px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+    font-size: 14px; color: #b8d6c2;
+  }
+  .verdict b { color: #eafff1; font-size: 15px; }
+  .verdict span { color: #7e9d8a; }
+
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; padding: 30px 0 60px; }
+  .card {
+    border: 1px solid #26262b; border-radius: 10px; background: #1a1a1e; overflow: hidden;
+    display: flex; flex-direction: column; position: relative;
+  }
+  .card.is-chosen { border-color: #3d6b4d; box-shadow: 0 0 0 1px #3d6b4d; }
+  .card.is-rejected { opacity: .62; }
+  .card.is-rejected:hover { opacity: 1; }
+  .verdict-tag {
+    position: absolute; top: 10px; right: 10px; z-index: 2;
+    font: 500 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: .12em; text-transform: uppercase;
+    border-radius: 999px; padding: 5px 9px;
+  }
+  .verdict-tag.chosen { background: #2f6b45; color: #eafff1; }
+  .verdict-tag.rejected { background: #2a2a30; color: #9a9aa4; }
+  .swatches { display: flex; height: 76px; }
+  .swatches i { flex: 1; display: block; }
+  .swatches i.accent { flex: 0 0 34%; }
+
+  .card-body { padding: 20px 20px 22px; flex: 1; display: flex; flex-direction: column; }
+  .name { margin: 0; font-size: 20px; font-weight: 650; letter-spacing: -0.02em; }
+  .rationale { margin: 8px 0 0; color: #a5a5ad; font-size: 14px; flex: 1; }
+
+  dl { margin: 18px 0 0; display: grid; grid-template-columns: 92px 1fr; gap: 6px 12px;
+       font-size: 13px; }
+  dt { color: #74747e; font: 500 11px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace;
+       letter-spacing: .08em; text-transform: uppercase; }
+  dd { margin: 0; color: #c9c9d1; }
+
+  .links { display: flex; gap: 8px; margin-top: 20px; }
+  .links a {
+    flex: 1; text-align: center; text-decoration: none;
+    border: 1px solid #33333a; border-radius: 8px; padding: 9px 12px;
+    font-size: 14px; font-weight: 500; color: #e8e8ea;
+    transition: background .14s ease, border-color .14s ease;
+  }
+  .links a:hover { background: #232329; border-color: #45454e; }
+  .links a.primary { background: #e8e8ea; color: #131316; border-color: #e8e8ea; }
+  .links a.primary:hover { background: #fff; }
+
+  section.notes { border-top: 1px solid #26262b; padding: 30px 0 80px; }
+  section.notes h2 { font-size: 16px; margin: 0 0 12px; }
+  section.notes ul { margin: 0; padding-left: 20px; color: #9c9ca4; font-size: 14px; max-width: 82ch; }
+  section.notes li { margin-bottom: 7px; }
+  code { font: 500 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+         background: #26262b; border-radius: 4px; padding: 1px 5px; color: #d5d5dd; }
+
+  @media (max-width: 1150px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 700px)  { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <h1>ActionPoints facelift — design directions</h1>
+    <p>
+      Takes on the restrained dev-tool genre, each mocked as a full homepage and a full Review
+      screen. The headline, lede, three steps, pricing facts and the six Action Points are held
+      the same across every direction, so the comparison is about look and feel rather than
+      wording; only small per-direction chrome (a keyboard hint, a word count) differs. The
+      winner gets rebuilt as real design tokens.
+    </p>
+    <p class="meta">Issue #14 · throwaway mockups · not application code</p>
+    <div class="verdict">
+      <b>Chosen: Graphite.</b>
+      <span>Decided 26 Jul 2026. A fourth light-theme direction (Bond) was explored afterwards and
+      rejected; dark-first stands. Graphite is rebuilt as real design tokens in issue #15.</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="grid">
+
+    <article class="card is-chosen">
+      <span class="verdict-tag chosen">Chosen</span>
+      <div class="swatches">
+        <i style="background:#0b0d10"></i>
+        <i style="background:#14171c"></i>
+        <i style="background:#262b33"></i>
+        <i class="accent" style="background:#6e7bff"></i>
+      </div>
+      <div class="card-body">
+        <h2 class="name">Graphite</h2>
+        <p class="rationale">
+          The cold instrument: neutral graphite surfaces, tight radii and one electric indigo —
+          dense and quiet, so the Action Points are the only thing with colour on the screen.
+        </p>
+        <dl>
+          <dt>Surface</dt><dd>Cold neutral, near-black</dd>
+          <dt>Accent</dt><dd>Electric indigo <code>#6E7BFF</code></dd>
+          <dt>Type</dt><dd>Inter — grotesque, tight</dd>
+          <dt>Density</dt><dd>Dense · 6px radius</dd>
+          <dt>Review</dt><dd>Compact cards, sticky Push bar</dd>
+        </dl>
+        <div class="links">
+          <a class="primary" href="graphite-home.html">Homepage</a>
+          <a href="graphite-review.html">Review</a>
+        </div>
+      </div>
+    </article>
+
+    <article class="card">
+      <div class="swatches">
+        <i style="background:#14110e"></i>
+        <i style="background:#1b1713"></i>
+        <i style="background:#302921"></i>
+        <i class="accent" style="background:#e0a24a"></i>
+      </div>
+      <div class="card-body">
+        <h2 class="name">Ledger</h2>
+        <p class="rationale">
+          The meeting record, typeset: warm ink surfaces, hairline rules and IBM Plex Mono labels —
+          the app looks like the minutes it produces, and the Review reads as a numbered record.
+        </p>
+        <dl>
+          <dt>Surface</dt><dd>Warm dark, ink brown</dd>
+          <dt>Accent</dt><dd>Amber <code>#E0A24A</code></dd>
+          <dt>Type</dt><dd>IBM Plex Sans + Plex Mono</dd>
+          <dt>Density</dt><dd>Medium · 2px radius, sharp</dd>
+          <dt>Review</dt><dd>Ruled entries, numbered gutter</dd>
+        </dl>
+        <div class="links">
+          <a class="primary" href="ledger-home.html">Homepage</a>
+          <a href="ledger-review.html">Review</a>
+        </div>
+      </div>
+    </article>
+
+    <article class="card">
+      <div class="swatches">
+        <i style="background:#07080a"></i>
+        <i style="background:#101317"></i>
+        <i style="background:#232830"></i>
+        <i class="accent" style="background:#b7f04a"></i>
+      </div>
+      <div class="card-body">
+        <h2 class="name">Signal</h2>
+        <p class="rationale">
+          Confident where it counts: a true-black canvas, Space Grotesk headlines and one loud lime —
+          generous radii and air, so the product reads as a finished commercial tool with an opinion.
+        </p>
+        <dl>
+          <dt>Surface</dt><dd>True black, lifted panels</dd>
+          <dt>Accent</dt><dd>Lime <code>#B7F04A</code></dd>
+          <dt>Type</dt><dd>Space Grotesk + Inter</dd>
+          <dt>Density</dt><dd>Airy · 14px radius, pills</dd>
+          <dt>Review</dt><dd>Roomy cards, floating Push bar</dd>
+        </dl>
+        <div class="links">
+          <a class="primary" href="signal-home.html">Homepage</a>
+          <a href="signal-review.html">Review</a>
+        </div>
+      </div>
+    </article>
+
+    <article class="card is-rejected">
+      <span class="verdict-tag rejected">Rejected</span>
+      <div class="swatches">
+        <i style="background:#f4f0e6"></i>
+        <i style="background:#fcfaf4"></i>
+        <i style="background:#1b2432"></i>
+        <i class="accent" style="background:#a8322b"></i>
+      </div>
+      <div class="card-body">
+        <h2 class="name">Bond</h2>
+        <p class="rationale">
+          The light-theme take, added after the first three: a utility patent drawing sheet —
+          warm bond stock, india ink, reference numerals on leaders, carmine for what is under
+          examination. Explored on request, rejected on sight.
+        </p>
+        <dl>
+          <dt>Surface</dt><dd>Warm bond, light <code>#F4F0E6</code></dd>
+          <dt>Accent</dt><dd>Examination carmine <code>#A8322B</code></dd>
+          <dt>Type</dt><dd>Libre Caslon + Public Sans</dd>
+          <dt>Density</dt><dd>Ruled sheet · 2px radius</dd>
+          <dt>Review</dt><dd>Numbered entries, void stamps</dd>
+        </dl>
+        <div class="links">
+          <a class="primary" href="bond-home.html">Homepage</a>
+          <a href="bond-review.html">Review</a>
+        </div>
+      </div>
+    </article>
+
+  </div>
+
+  <section class="notes">
+    <h2>What to look at</h2>
+    <ul>
+      <li><strong>Homepage:</strong> does it read as a finished commercial product, or as a template? Would you paste a real transcript into it?</li>
+      <li><strong>Review:</strong> can you curate quickly — is it obvious what accept, reject, and edit do, and which card is being edited?</li>
+      <li>Each Review shows the same six Action Points from the sample product-sync transcript, with one rejected and one open in the editor, so the states are comparable.</li>
+      <li>Every font is SIL Open Font License and self-hosted from <code>fonts/</code> — no CDN, nothing to license.</li>
+      <li>These are throwaway artifacts. The winner is rebuilt as semantic design tokens in the app (issue #15); the losing directions are not maintained.</li>
+    </ul>
+  </section>
+</div>
+
+</body>
+</html>

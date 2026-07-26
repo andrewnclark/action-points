@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Graphite — Review — ActionPoints mockup</title>
+<style>
+  @font-face {
+    font-family: 'Inter';
+    src: url('fonts/Inter-var.woff2') format('woff2');
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: swap;
+  }
+
+  :root {
+    --bg:           #0b0d10;
+    --surface:      #14171c;
+    --surface-2:    #1a1e24;
+    --border:       #262b33;
+    --border-soft:  #1e222a;
+    --text:         #e6e8eb;
+    --text-muted:   #8b929c;
+    --text-faint:   #626a75;
+    --accent:       #6e7bff;
+    --accent-hi:    #8b95ff;
+    --success:      #3ecf8e;
+    --danger:       #f2555a;
+    --radius:       6px;
+    --radius-sm:    4px;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-font-smoothing: antialiased; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 14px; line-height: 1.55; letter-spacing: -0.006em;
+  }
+  a { color: inherit; }
+
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 32px; }
+  .col  { max-width: 760px; margin: 0 auto; padding-bottom: 80px; }
+
+  /* ── Navigation shell ─────────────────────────────────────────── */
+  .nav {
+    position: sticky; top: 0; z-index: 20;
+    border-bottom: 1px solid var(--border-soft);
+    background: rgba(11,13,16,.82); backdrop-filter: blur(12px);
+  }
+  .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 52px; }
+  .wordmark {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-weight: 600; font-size: 14px; letter-spacing: -0.02em; text-decoration: none;
+  }
+  .wordmark .glyph {
+    width: 18px; height: 18px; border-radius: var(--radius-sm);
+    background: linear-gradient(150deg, var(--accent-hi), var(--accent));
+    display: grid; place-items: center; color: #0b0d10; font-size: 11px; font-weight: 700;
+  }
+  .nav-right { display: flex; align-items: center; gap: 6px; }
+  .credits {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 26px; padding: 0 10px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--surface);
+    font-size: 12px; color: var(--text-muted); text-decoration: none;
+  }
+  .credits b { color: var(--text); font-weight: 600; }
+  .credits:hover { border-color: #39414d; }
+  .avatar {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: var(--surface-2); border: 1px solid var(--border);
+    display: grid; place-items: center; font-size: 11px; font-weight: 600; color: var(--text-muted);
+  }
+
+  /* ── Controls ─────────────────────────────────────────────────── */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    height: 34px; padding: 0 14px; border-radius: var(--radius);
+    border: 1px solid transparent; font: inherit; font-weight: 500; font-size: 13px;
+    cursor: pointer; text-decoration: none;
+    transition: background .12s ease, border-color .12s ease, color .12s ease;
+  }
+  .btn:focus-visible { outline: 2px solid var(--accent-hi); outline-offset: 2px; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent-hi); }
+  .btn-ghost { color: var(--text-muted); background: transparent; }
+  .btn-ghost:hover { color: var(--text); background: var(--surface-2); }
+  .btn-outline { border-color: var(--border); color: var(--text); background: transparent; }
+  .btn-outline:hover { border-color: #39414d; background: var(--surface); }
+  .btn-xs { height: 26px; padding: 0 9px; font-size: 12px; gap: 5px; }
+  .btn-icon { width: 32px; height: 32px; padding: 0; }
+
+  /* ── Review header ────────────────────────────────────────────── */
+  .head {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 20px; padding: 34px 0 18px;
+  }
+  .head h1 { margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.025em; }
+  .head p  { margin: 5px 0 0; font-size: 13px; color: var(--text-muted); }
+  .head .crumb {
+    font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--text-faint); margin-bottom: 8px; display: block;
+  }
+
+  .toolbar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 0 14px; border-bottom: 1px solid var(--border-soft); margin-bottom: 18px;
+    font-size: 12px; color: var(--text-faint);
+  }
+  .tally { display: inline-flex; align-items: center; gap: 6px; }
+  .tally .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .tally.accepted .dot { background: var(--accent); }
+  .tally.rejected .dot { background: var(--text-faint); }
+  .toolbar .spacer { flex: 1; }
+
+  /* ── Action Point cards ───────────────────────────────────────── */
+  .points { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .point {
+    position: relative;
+    border: 1px solid var(--border-soft); border-radius: var(--radius);
+    background: var(--surface); padding: 14px 16px;
+    transition: border-color .12s ease, background .12s ease;
+  }
+  .point:hover { border-color: var(--border); }
+  .point-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+  .point h2 { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: -0.012em; line-height: 1.4; }
+  .point .desc { margin: 6px 0 0; font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+  .point .actions { display: flex; gap: 2px; flex-shrink: 0; opacity: .55; transition: opacity .12s ease; }
+  .point:hover .actions { opacity: 1; }
+
+  .meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 11px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    height: 22px; padding: 0 8px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); color: var(--text-muted); font-size: 12px;
+  }
+  .chip .ic { color: var(--text-faint); font-size: 11px; }
+  .chip.is-empty { color: var(--text-faint); border-style: dashed; }
+
+  /* Rejected: present but clearly out of the Push. */
+  .point.is-rejected { background: transparent; border-style: dashed; }
+  .point.is-rejected h2 { text-decoration: line-through; color: var(--text-faint); }
+  .point.is-rejected .desc, .point.is-rejected .chip { color: var(--text-faint); opacity: .75; }
+  .point.is-rejected .actions { opacity: 1; }
+
+  /* Editing: the card becomes a form, and says so. */
+  .point.is-editing {
+    border-color: var(--accent); background: var(--surface-2);
+    box-shadow: 0 0 0 1px rgba(110,123,255,.28), 0 12px 30px rgba(0,0,0,.4);
+  }
+  .editing-flag {
+    position: absolute; top: -9px; left: 12px;
+    font-size: 10px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase;
+    color: #fff; background: var(--accent); border-radius: 3px; padding: 2px 7px;
+  }
+  .field { display: block; margin-bottom: 10px; }
+  .field > span {
+    display: block; font-size: 11px; letter-spacing: .07em; text-transform: uppercase;
+    color: var(--text-faint); margin-bottom: 5px;
+  }
+  input[type=text], input[type=date], textarea {
+    display: block; width: 100%; font: inherit; font-size: 13px; color: var(--text);
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 8px 10px; line-height: 1.5;
+  }
+  textarea { resize: vertical; min-height: 62px; }
+  input:focus, textarea:focus { outline: none; border-color: var(--accent); }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .edit-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 12px; }
+
+  /* ── Sticky Push bar ──────────────────────────────────────────── */
+  .pushbar {
+    position: sticky; bottom: 0; margin-top: 18px;
+    display: flex; align-items: center; gap: 14px;
+    padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: rgba(20,23,28,.92); backdrop-filter: blur(10px);
+    box-shadow: 0 -8px 24px rgba(0,0,0,.35);
+  }
+  .pushbar .summary { font-size: 13px; color: var(--text-muted); }
+  .pushbar .summary b { color: var(--text); font-weight: 600; }
+  .pushbar .spacer { flex: 1; }
+
+  /* ── Mockup scaffolding (not part of the design) ──────────────── */
+  .mockup-nav {
+    position: fixed; left: 16px; bottom: 16px; z-index: 90;
+    display: flex; align-items: center; gap: 4px;
+    padding: 5px 6px 5px 10px; border-radius: 999px;
+    background: #1c1c1e; border: 1px solid #34343a;
+    box-shadow: 0 8px 28px rgba(0,0,0,.5);
+    font: 500 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: #9a9aa2; letter-spacing: .04em;
+  }
+  .mockup-nav a { text-decoration: none; color: #d4d4d8; padding: 5px 9px; border-radius: 999px; }
+  .mockup-nav a:hover { background: #2a2a2e; }
+  .mockup-nav a[aria-current] { background: #3a3a41; color: #fff; }
+  .mockup-nav .sep { color: #4a4a52; }
+
+  @media (max-width: 820px) {
+    .wrap { padding: 0 18px; }
+    .head { flex-direction: column; align-items: stretch; }
+    .field-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap nav-inner">
+    <a class="wordmark" href="graphite-home.html"><span class="glyph">▲</span>ActionPoints</a>
+    <div class="nav-right">
+      <a class="credits" href="#"><b>3</b> Credits</a>
+      <button class="btn btn-ghost btn-icon" title="Theme: dark" aria-label="Theme: dark">◐</button>
+      <div class="avatar">MB</div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap col">
+  <div class="head">
+    <div>
+      <span class="crumb">Extraction · Product sync, 26 Jul</span>
+      <h1>Review your Action Points</h1>
+      <p>6 Action Points extracted from your transcript.</p>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <span class="tally accepted"><span class="dot"></span>5 accepted</span>
+    <span class="tally rejected"><span class="dot"></span>1 rejected</span>
+    <span class="spacer"></span>
+    <span>Nothing is created in Linear until you Push.</span>
+  </div>
+
+  <ul class="points">
+
+    <li class="point">
+      <div class="point-top">
+        <h2>Finish the pricing table on the landing page</h2>
+        <div class="actions">
+          <button class="btn btn-ghost btn-xs">✎ Edit</button>
+          <button class="btn btn-ghost btn-xs">✕ Reject</button>
+        </div>
+      </div>
+      <p class="desc">The landing page is complete apart from the pricing table. Dan committed to finishing it before the Thursday cut-off.</p>
+      <div class="meta">
+        <span class="chip"><span class="ic">◍</span>Dan Whitlock</span>
+        <span class="chip"><span class="ic">▤</span>30 Jul 2026</span>
+      </div>
+    </li>
+
+    <li class="point is-editing">
+      <span class="editing-flag">Editing</span>
+      <label class="field">
+        <span>Title</span>
+        <input type="text" value="Send the final onboarding emails to Maya for sign-off">
+      </label>
+      <label class="field">
+        <span>Description</span>
+        <textarea>Drafts are done. Priya sends the final versions tomorrow for Maya's approval before launch.</textarea>
+      </label>
+      <div class="field-row">
+        <label class="field">
+          <span>Assignee</span>
+          <input type="text" value="Priya Raman">
+        </label>
+        <label class="field">
+          <span>Due date</span>
+          <input type="date" value="2026-07-27">
+        </label>
+      </div>
+      <div class="edit-actions">
+        <button class="btn btn-ghost btn-xs">Cancel</button>
+        <button class="btn btn-primary btn-xs">Save</button>
+      </div>
+    </li>
+
+    <li class="point is-rejected">
+      <div class="point-top">
+        <h2>Write a subject line for the welcome email</h2>
+        <div class="actions">
+          <button class="btn btn-outline btn-xs">↩ Accept</button>
+        </div>
+      </div>
+      <p class="desc">Priya flagged the welcome email as still missing a proper subject line.</p>
+      <div class="meta">
+        <span class="chip"><span class="ic">◍</span>Priya Raman</span>
+        <span class="chip is-empty"><span class="ic">▤</span>No due date</span>
+      </div>
+    </li>
+
+    <li class="point">
+      <div class="point-top">
+        <h2>Get legal sign-off on the updated terms</h2>
+        <div class="actions">
+          <button class="btn btn-ghost btn-xs">✎ Edit</button>
+          <button class="btn btn-ghost btn-xs">✕ Reject</button>
+        </div>
+      </div>
+      <p class="desc">Dan emails Sofia in legal today and asks for a yes or no on the updated terms by Friday, before the switch is flipped.</p>
+      <div class="meta">
+        <span class="chip"><span class="ic">◍</span>Dan Whitlock</span>
+        <span class="chip"><span class="ic">▤</span>31 Jul 2026</span>
+      </div>
+    </li>
+
+    <li class="point">
+      <div class="point-top">
+        <h2>Fix the signup form on Safari</h2>
+        <div class="actions">
+          <button class="btn btn-ghost btn-xs">✎ Edit</button>
+          <button class="btn btn-ghost btn-xs">✕ Reject</button>
+        </div>
+      </div>
+      <p class="desc">The signup form breaks on Safari. Jonas is out this week, so Dan picks it up once the pricing table ships.</p>
+      <div class="meta">
+        <span class="chip"><span class="ic">◍</span>Dan Whitlock</span>
+        <span class="chip is-empty"><span class="ic">▤</span>No due date</span>
+      </div>
+    </li>
+
+    <li class="point">
+      <div class="point-top">
+        <h2>Book the go/no-go call for Monday morning</h2>
+        <div class="actions">
+          <button class="btn btn-ghost btn-xs">✎ Edit</button>
+          <button class="btn btn-ghost btn-xs">✕ Reject</button>
+        </div>
+      </div>
+      <p class="desc">Maya books the call and sends the invite round this afternoon.</p>
+      <div class="meta">
+        <span class="chip"><span class="ic">◍</span>Maya Ellison</span>
+        <span class="chip"><span class="ic">▤</span>26 Jul 2026</span>
+      </div>
+    </li>
+
+  </ul>
+
+  <div class="pushbar">
+    <span class="summary"><b>5</b> Action Points ready · pushing to <b>Linear</b> · Product</span>
+    <span class="spacer"></span>
+    <button class="btn btn-ghost">Reject all</button>
+    <button class="btn btn-primary">➤ Push 5 Action Points</button>
+  </div>
+</main>
+
+<div class="mockup-nav">
+  GRAPHITE <span class="sep">/</span>
+  <a href="graphite-home.html">Home</a>
+  <a href="graphite-review.html" aria-current="page">Review</a>
+  <span class="sep">·</span>
+  <a href="index.html">All directions</a>
+</div>
+
+</body>
+</html>
