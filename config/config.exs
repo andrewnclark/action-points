@@ -53,7 +53,9 @@ config :action_points, ActionPointsWeb.Endpoint,
   adapter: Bandit.PhoenixAdapter,
   render_errors: [
     formats: [html: ActionPointsWeb.ErrorHTML, json: ActionPointsWeb.ErrorJSON],
-    layout: false
+    # The error pages are designed screens, so they need the root layout's head
+    # — the stylesheet and the theme script — the same as every other page.
+    layout: {ActionPointsWeb.Layouts, :root}
   ],
   pubsub_server: ActionPoints.PubSub,
   live_view: [signing_salt: "3MY20CZ8"]
