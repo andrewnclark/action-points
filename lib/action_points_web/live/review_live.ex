@@ -40,15 +40,15 @@ defmodule ActionPointsWeb.ReviewLive do
                 {ngettext(
                   "1 Action Point extracted from your transcript.",
                   "%{count} Action Points extracted from your transcript.",
-                  length(@extraction.action_points)
+                  @action_point_count
                 )}
               </p>
             </div>
 
-            <ul id="action-points" class="space-y-4">
+            <ul id="action-points" phx-update="stream" class="space-y-4">
               <li
-                :for={action_point <- @extraction.action_points}
-                id={"action-point-#{action_point.id}"}
+                :for={{dom_id, action_point} <- @streams.action_points}
+                id={dom_id}
                 class="card bg-base-200 p-5"
               >
                 <h2 class="font-semibold">{action_point.title}</h2>
@@ -75,22 +75,32 @@ defmodule ActionPointsWeb.ReviewLive do
 
   @impl true
   def mount(%{"id" => id}, session, socket) do
+    # Subscribe before fetching so a status change can't slip in between —
+    # otherwise the spinner could hang on an update we never hear about.
+    if connected?(socket), do: Meetings.subscribe(id)
+
     extraction = Meetings.get_extraction!(id, session["anon_session_token"])
 
-    if connected?(socket), do: Meetings.subscribe(extraction)
-
-    {:ok, assign(socket, :extraction, extraction)}
+    {:ok, assign_extraction(socket, extraction)}
   end
 
   @impl true
   def handle_event("retry", _params, socket) do
-    extraction = Meetings.retry_extraction(socket.assigns.extraction)
-    {:noreply, assign(socket, :extraction, %{extraction | action_points: []})}
+    %{id: id, session_token: session_token} = socket.assigns.extraction
+    Meetings.retry_extraction(socket.assigns.extraction)
+    {:noreply, assign_extraction(socket, Meetings.get_extraction!(id, session_token))}
   end
 
   @impl true
   def handle_info({:extraction_updated, _id}, socket) do
     %{id: id, session_token: session_token} = socket.assigns.extraction
-    {:noreply, assign(socket, :extraction, Meetings.get_extraction!(id, session_token))}
+    {:noreply, assign_extraction(socket, Meetings.get_extraction!(id, session_token))}
+  end
+
+  defp assign_extraction(socket, extraction) do
+    socket
+    |> assign(:extraction, %{extraction | action_points: []})
+    |> assign(:action_point_count, length(extraction.action_points))
+    |> stream(:action_points, extraction.action_points, reset: true)
   end
 end

@@ -4,7 +4,7 @@ defmodule ActionPoints.Meetings.Extraction do
   Action Points — or fails as a whole (see CONTEXT.md).
 
   Keyed to the anonymous visitor's session token; `user_id` is claimed at
-  signup so a previewed Extraction survives registration.
+  signup so the visitor's Extraction survives registration.
   """
 
   use Ecto.Schema

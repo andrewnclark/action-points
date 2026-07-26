@@ -11,7 +11,10 @@ defmodule ActionPoints.Meetings.FakeExtractor do
 
   @impl true
   def extract(_transcript_text) do
-    Application.get_env(:action_points, :fake_extractor_result, default_result())
+    case Application.get_env(:action_points, :fake_extractor_result, default_result()) do
+      :crash -> raise "fake extractor crash"
+      result -> result
+    end
   end
 
   defp default_result do
