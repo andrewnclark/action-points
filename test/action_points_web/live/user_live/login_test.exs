@@ -6,11 +6,11 @@ defmodule ActionPointsWeb.UserLive.LoginTest do
 
   describe "login page" do
     test "renders login page", %{conn: conn} do
-      {:ok, _lv, html} = live(conn, ~p"/users/log-in")
+      {:ok, lv, _html} = live(conn, ~p"/users/log-in")
 
-      assert html =~ "Log in"
-      assert html =~ "Sign up"
-      assert html =~ "Log in with email"
+      assert has_element?(lv, "#login_form_magic button", "Email me a login link")
+      assert has_element?(lv, "#login_form_password")
+      assert has_element?(lv, "main a", "Create one")
     end
   end
 
@@ -20,12 +20,15 @@ defmodule ActionPointsWeb.UserLive.LoginTest do
 
       {:ok, lv, _html} = live(conn, ~p"/users/log-in")
 
-      {:ok, _lv, html} =
+      {:ok, sent, _html} =
         form(lv, "#login_form_magic", user: %{email: user.email})
         |> render_submit()
-        |> follow_redirect(conn, ~p"/users/log-in")
+        |> follow_redirect(conn, ~p"/users/log-in?magic_link=requested")
 
-      assert html =~ "If your email is in our system"
+      # Naming the address the visitor typed discloses nothing; the wording
+      # still refuses to confirm whether an account exists.
+      assert has_element?(sent, "#magic-link-sent", user.email)
+      assert has_element?(sent, "#magic-link-sent", "If that address has an account")
 
       assert ActionPoints.Repo.get_by!(ActionPoints.Accounts.UserToken, user_id: user.id).context ==
                "login"
@@ -34,12 +37,26 @@ defmodule ActionPointsWeb.UserLive.LoginTest do
     test "does not disclose if user is registered", %{conn: conn} do
       {:ok, lv, _html} = live(conn, ~p"/users/log-in")
 
-      {:ok, _lv, html} =
+      {:ok, sent, _html} =
         form(lv, "#login_form_magic", user: %{email: "idonotexist@example.com"})
         |> render_submit()
+        |> follow_redirect(conn, ~p"/users/log-in?magic_link=requested")
+
+      assert has_element?(sent, "#magic-link-sent", "If that address has an account")
+    end
+
+    test "the sent screen leads back to the form for a mistyped address", %{conn: conn} do
+      {:ok, sent, _html} = live(conn, ~p"/users/log-in?magic_link=requested")
+
+      refute has_element?(sent, "#login_form_magic")
+
+      {:ok, login, _html} =
+        sent
+        |> element("#magic-link-sent a", "use a different address")
+        |> render_click()
         |> follow_redirect(conn, ~p"/users/log-in")
 
-      assert html =~ "If your email is in our system"
+      assert has_element?(login, "#login_form_magic")
     end
   end
 
@@ -76,16 +93,16 @@ defmodule ActionPointsWeb.UserLive.LoginTest do
   end
 
   describe "login navigation" do
-    test "redirects to registration page when the Register button is clicked", %{conn: conn} do
+    test "redirects to registration page when the sign-up link is clicked", %{conn: conn} do
       {:ok, lv, _html} = live(conn, ~p"/users/log-in")
 
-      {:ok, _login_live, login_html} =
+      {:ok, registration, _html} =
         lv
-        |> element("main a", "Sign up")
+        |> element("main a", "Create one")
         |> render_click()
         |> follow_redirect(conn, ~p"/users/register")
 
-      assert login_html =~ "Register"
+      assert has_element?(registration, "#registration_form")
     end
   end
 
@@ -96,11 +113,12 @@ defmodule ActionPointsWeb.UserLive.LoginTest do
     end
 
     test "shows login page with email filled in", %{conn: conn, user: user} do
-      {:ok, _lv, html} = live(conn, ~p"/users/log-in")
+      {:ok, lv, html} = live(conn, ~p"/users/log-in")
 
-      assert html =~ "You need to reauthenticate"
-      refute html =~ "Register"
-      assert html =~ "Log in with email"
+      assert html =~ "Confirm it&#39;s you"
+      # Someone already signed in is not being sold an account.
+      refute has_element?(lv, "main a", "Create one")
+      assert has_element?(lv, "#login_form_magic button", "Email me a login link")
 
       assert html =~
                ~s(<input type="email" name="user[email]" id="login_form_magic_email" value="#{user.email}")

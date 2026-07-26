@@ -6,10 +6,12 @@ defmodule ActionPointsWeb.UserLive.RegistrationTest do
 
   describe "Registration page" do
     test "renders registration page", %{conn: conn} do
-      {:ok, _lv, html} = live(conn, ~p"/users/register")
+      {:ok, lv, html} = live(conn, ~p"/users/register")
 
-      assert html =~ "Register"
-      assert html =~ "Log in"
+      assert has_element?(lv, "#registration_form")
+      assert has_element?(lv, "#registration_form button", "Create account")
+      # The Free Meeting is the reason to sign up, so the page says so.
+      assert html =~ "Free Meeting"
     end
 
     test "redirects if already logged in", %{conn: conn} do
@@ -30,7 +32,6 @@ defmodule ActionPointsWeb.UserLive.RegistrationTest do
         |> element("#registration_form")
         |> render_change(user: %{"email" => "with spaces"})
 
-      assert result =~ "Register"
       assert result =~ "must have the @ sign and no spaces"
     end
   end
@@ -42,12 +43,13 @@ defmodule ActionPointsWeb.UserLive.RegistrationTest do
       email = unique_user_email()
       form = form(lv, "#registration_form", user: valid_user_attributes(email: email))
 
-      {:ok, _lv, html} =
+      {:ok, login, _html} =
         render_submit(form)
-        |> follow_redirect(conn, ~p"/users/log-in")
+        |> follow_redirect(conn, ~p"/users/log-in?magic_link=sent")
 
-      assert html =~
-               ~r/An email was sent to .*, please access it to confirm your account/
+      # The next step is a designed screen rather than a toast that evaporates:
+      # it names the address the link went to.
+      assert has_element?(login, "#magic-link-sent", email)
     end
 
     test "renders errors for duplicated email", %{conn: conn} do
@@ -70,13 +72,13 @@ defmodule ActionPointsWeb.UserLive.RegistrationTest do
     test "redirects to login page when the Log in button is clicked", %{conn: conn} do
       {:ok, lv, _html} = live(conn, ~p"/users/register")
 
-      {:ok, _login_live, login_html} =
+      {:ok, login, _login_html} =
         lv
         |> element("main a", "Log in")
         |> render_click()
         |> follow_redirect(conn, ~p"/users/log-in")
 
-      assert login_html =~ "Log in"
+      assert has_element?(login, "#login_form_magic")
     end
   end
 end

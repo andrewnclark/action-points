@@ -43,7 +43,10 @@ defmodule ActionPointsWeb.Layouts do
       id="app-nav"
       class="sticky top-0 z-20 border-b border-base-300/60 bg-base-100/80 backdrop-blur-md"
     >
-      <nav class="mx-auto flex h-13 max-w-[1180px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+      <%!-- A signed-in account carries enough links to outrun a phone's width, so
+      below `sm` the cluster wraps onto its own row rather than scrolling the
+      whole page sideways. --%>
+      <nav class="mx-auto flex max-w-[1180px] flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-2 sm:h-13 sm:flex-nowrap sm:py-0 sm:px-6 lg:px-8">
         <.link
           navigate={~p"/"}
           class="flex w-fit items-center gap-2 font-semibold tracking-[-0.02em]"
@@ -99,6 +102,100 @@ defmodule ActionPointsWeb.Layouts do
     </main>
 
     <.flash_group flash={@flash} />
+    """
+  end
+
+  @doc """
+  The chrome the four auth screens share: a narrow column, a lead that says
+  which moment this is, the form on one panel, and a quiet footer link out.
+
+  The screens differ by state — registering with a Demo Review in hand is a
+  different moment from re-authenticating — so the lead is a slot and every
+  screen writes its own. What they must not differ in is the shape.
+
+  ## Examples
+
+      <Layouts.auth_page eyebrow="Account" title="Log in.">
+        <:lead>We email you a link — no password to remember.</:lead>
+        <.form for={@form} id="login_form_magic">…</.form>
+        <:footer>No account yet? <.link navigate={~p"/users/register"}>Create one</.link></:footer>
+      </Layouts.auth_page>
+  """
+  attr :eyebrow, :string, required: true
+  attr :title, :string, required: true
+  slot :lead
+  slot :inner_block, required: true
+  slot :footer
+
+  def auth_page(assigns) do
+    ~H"""
+    <div class="mx-auto max-w-md pt-10">
+      <.page_lead eyebrow={@eyebrow} title={@title}>
+        <:lead :if={@lead != []}>{render_slot(@lead)}</:lead>
+      </.page_lead>
+
+      <div class="mt-8 rounded-box border border-base-300 bg-base-200 p-6">
+        {render_slot(@inner_block)}
+      </div>
+
+      <p :if={@footer != []} class="mt-4 text-center text-xs text-base-content/65">
+        {render_slot(@footer)}
+      </p>
+    </div>
+    """
+  end
+
+  @doc """
+  How a page opens: the small eyebrow naming the moment, the sentence-cased
+  title, and an optional line of context. Shared so the account screens can't
+  drift apart a tracking value at a time.
+  """
+  attr :eyebrow, :string, required: true
+  attr :title, :string, required: true
+  slot :lead
+
+  def page_lead(assigns) do
+    ~H"""
+    <header>
+      <span class="text-[11px] font-medium tracking-[0.09em] text-base-content/65 uppercase">
+        {@eyebrow}
+      </span>
+      <h1 class="mt-2 text-3xl font-semibold tracking-[-0.03em]">{@title}</h1>
+      <p :if={@lead != []} class="mt-3 text-base-content/70">{render_slot(@lead)}</p>
+    </header>
+    """
+  end
+
+  @doc """
+  The Demo Review a visitor is about to sign up around, stated on the signup
+  screens themselves.
+
+  The Push button promised the Review would survive; this is that promise kept
+  in view at the moment of doubt, counting exactly what is waiting. It renders
+  nothing when there is no Demo behind the visitor.
+  """
+  attr :count, :integer, default: nil, doc: "Action Points ready to Push, nil when there is none"
+
+  def review_kept(assigns) do
+    ~H"""
+    <div
+      :if={@count}
+      id="review-kept"
+      class="mb-5 flex gap-3 rounded-box border border-primary/40 bg-primary/[0.07] p-4"
+    >
+      <.icon name="hero-bookmark" class="size-5 shrink-0 text-primary" />
+      <div>
+        <p class="font-semibold">Your Review is kept.</p>
+        <p class="mt-1 text-base-content/70">
+          <%= if @count > 0 do %>
+            {ngettext("1 Action Point is", "%{count} Action Points are", @count)} waiting to Push,
+            and you land straight back on them. Nothing is created until you Push.
+          <% else %>
+            You land straight back on it once you're in. Nothing is created until you Push.
+          <% end %>
+        </p>
+      </div>
+    </div>
     """
   end
 
