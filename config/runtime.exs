@@ -26,6 +26,14 @@ if api_key = System.get_env("ANTHROPIC_API_KEY") do
   config :action_points, ActionPoints.Meetings.Extractor.Claude, api_key: api_key
 end
 
+# Read in every environment: Stripe test keys in dev, live keys later as a
+# config change (story 43). Tests never reach it — the payment port is faked.
+if stripe_secret_key = System.get_env("STRIPE_SECRET_KEY") do
+  config :action_points, ActionPoints.Billing.Stripe,
+    api_key: stripe_secret_key,
+    webhook_secret: System.get_env("STRIPE_WEBHOOK_SECRET")
+end
+
 if config_env() == :prod do
   database_url =
     System.get_env("DATABASE_URL") ||

@@ -12,6 +12,10 @@ defmodule ActionPoints.Billing.CreditTransaction do
     field :amount, :integer
     field :kind, Ecto.Enum, values: [:signup_grant, :pack_purchase, :extraction_consumption]
 
+    # The payment provider's checkout-session id on a Pack purchase; nil on
+    # other kinds. Unique, so a replayed webhook can never grant twice.
+    field :provider_ref, :string
+
     belongs_to :user, ActionPoints.Accounts.User
     # Which Extraction a consumption paid for; nil on grants. Unique per
     # Extraction, so one success can never be charged twice.
