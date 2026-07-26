@@ -87,7 +87,10 @@ defmodule ActionPointsWeb.CreditGatingTest do
       conn = get(conn, ~p"/")
       {:ok, home, _html} = live(conn)
 
+      # A refused Extraction lands on the gate, not a bare price list: the reason
+      # they were moved is on the page they were moved to, with the Pack under it.
       {:ok, buy, _html} = follow_redirect(submit_transcript(home), conn)
+      assert has_element?(buy, "#credits-gate", "out of Credits")
       assert has_element?(buy, "#pack")
 
       # Nothing was created for the refused attempt.
