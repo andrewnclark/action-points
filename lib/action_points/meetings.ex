@@ -180,16 +180,45 @@ defmodule ActionPoints.Meetings do
   end
 
   @doc """
-  Counts the Action Points still accepted in an Extraction's Review — the
-  number the Push button promises to create.
+  Counts the Action Points a Push would create right now — accepted in the
+  Review and not yet pushed. This is the number the Push button promises.
   """
-  def count_accepted_action_points(extraction_id) do
-    Repo.aggregate(
-      from(ap in ActionPoint,
-        where: ap.extraction_id == ^extraction_id and ap.status == :accepted
-      ),
-      :count
+  def count_pushable_action_points(extraction_id) do
+    Repo.aggregate(pushable_query(extraction_id), :count)
+  end
+
+  # Pushable: accepted in the Review and not yet pushed. The single place the
+  # predicate is written in SQL; `ActionPoint.pushable?/1` is its in-memory twin.
+  defp pushable_query(extraction_id) do
+    from ap in ActionPoint,
+      where:
+        ap.extraction_id == ^extraction_id and ap.status == :accepted and
+          is_nil(ap.sink_issue_id)
+  end
+
+  ## Push bookkeeping
+
+  @doc """
+  Lists the Action Points a Push still has to create: accepted in the Review
+  and carrying no created-issue reference yet. A retry after a partial Push
+  therefore picks up exactly the missing ones — never a duplicate.
+  """
+  def list_pushable_action_points(extraction_id) do
+    Repo.all(from ap in pushable_query(extraction_id), order_by: [asc: ap.position])
+  end
+
+  @doc """
+  Records the created-issue reference on a pushed Action Point — the moment it
+  stops being a proposal and becomes a real task in the Task Sink.
+  """
+  def record_push!(%ActionPoint{} = action_point, %{id: id, identifier: identifier, url: url}) do
+    action_point
+    |> Ecto.Changeset.change(
+      sink_issue_id: id,
+      sink_issue_identifier: identifier,
+      sink_issue_url: url
     )
+    |> Repo.update!()
   end
 
   ## PubSub

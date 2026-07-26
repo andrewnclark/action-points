@@ -15,9 +15,23 @@ defmodule ActionPoints.Meetings.ActionPoint do
     field :due_date, :date
     field :status, Ecto.Enum, values: [:accepted, :rejected], default: :accepted
 
+    # The created-issue reference, set when this Action Point is pushed to the
+    # Task Sink. Its presence is what makes a Push retry skip this row.
+    field :sink_issue_id, :string
+    field :sink_issue_identifier, :string
+    field :sink_issue_url, :string
+
     belongs_to :extraction, ActionPoints.Meetings.Extraction
 
     timestamps(type: :utc_datetime)
+  end
+
+  @doc """
+  Whether a Push would create this Action Point right now: accepted in the
+  Review and not yet pushed. Mirrors the query in `ActionPoints.Meetings`.
+  """
+  def pushable?(%__MODULE__{} = action_point) do
+    action_point.status == :accepted and is_nil(action_point.sink_issue_id)
   end
 
   def changeset(action_point, attrs) do
