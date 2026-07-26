@@ -1,0 +1,33 @@
+# Fly.io config — the one deploy (ADR-0006, issue #12).
+# Minimum hardware on purpose: a friends-feedback MVP, not a launch posture.
+app = "actionpoints"
+primary_region = "lhr"
+
+# Headroom for the BEAM on a 256MB machine — release boots + migrations spike.
+# Top-level on purpose: after a [[vm]] header this key would silently belong
+# to the vm table, where flyctl ignores it.
+swap_size_mb = 512
+
+[build]
+
+[deploy]
+  release_command = "/app/bin/migrate"
+
+[env]
+  PHX_HOST = "actionpoints.fly.dev"
+  PORT = "8080"
+  # Fly private networking (Postgres attach) is IPv6-only.
+  ECTO_IPV6 = "true"
+  # Half the default: one shared CPU and a dev-size Postgres don't need 10.
+  POOL_SIZE = "5"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
