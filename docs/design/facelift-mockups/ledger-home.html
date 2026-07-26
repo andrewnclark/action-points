@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ledger — Homepage — ActionPoints mockup</title>
+<style>
+  @font-face {
+    font-family: 'IBM Plex Sans';
+    src: url('fonts/IBMPlexSans-var.woff2') format('woff2');
+    font-weight: 100 700; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'IBM Plex Mono';
+    src: url('fonts/IBMPlexMono-400.woff2') format('woff2');
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'IBM Plex Mono';
+    src: url('fonts/IBMPlexMono-500.woff2') format('woff2');
+    font-weight: 500; font-style: normal; font-display: swap;
+  }
+
+  /* ── Ledger tokens ───────────────────────────────────────────────
+     Warm ink surfaces, hairline rules, amber accent. The app looks
+     like the record it produces. */
+  :root {
+    --bg:          #14110e;
+    --panel:       #1b1713;
+    --panel-2:     #221d18;
+    --rule:        #302921;
+    --rule-soft:   #241f1a;
+    --text:        #f3ece1;
+    --text-muted:  #a2937f;
+    --text-faint:  #756757;
+    --accent:      #e0a24a;
+    --accent-dim:  #b57f31;
+    --accent-ink:  #1a1206;
+    --success:     #8fae5f;
+    --danger:      #d9603f;
+    --radius:      2px;
+    --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-font-smoothing: antialiased; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    font-size: 15px; line-height: 1.65;
+  }
+  a { color: inherit; }
+
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 36px; }
+  .col  { max-width: 720px; }
+
+  .label {
+    font-family: var(--mono); font-size: 11px; font-weight: 500;
+    letter-spacing: .14em; text-transform: uppercase; color: var(--text-faint);
+  }
+
+  /* ── Navigation shell ─────────────────────────────────────────── */
+  .nav { border-bottom: 1px solid var(--rule); background: var(--bg); position: sticky; top: 0; z-index: 20; }
+  .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 60px; }
+  .wordmark {
+    font-family: var(--mono); font-weight: 500; font-size: 15px;
+    letter-spacing: -0.01em; text-decoration: none;
+    display: inline-flex; align-items: baseline; gap: 2px;
+  }
+  .wordmark .mark { color: var(--accent); }
+  .nav-right { display: flex; align-items: center; gap: 4px; }
+
+  /* ── Controls ─────────────────────────────────────────────────── */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    height: 38px; padding: 0 16px; border-radius: var(--radius);
+    border: 1px solid transparent; background: transparent; color: var(--text);
+    font-family: var(--mono); font-size: 12px; font-weight: 500;
+    letter-spacing: .08em; text-transform: uppercase;
+    cursor: pointer; text-decoration: none;
+    transition: background .13s ease, border-color .13s ease, color .13s ease;
+  }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn-primary { background: var(--accent); color: var(--accent-ink); font-weight: 500; }
+  .btn-primary:hover { background: #eeb35c; }
+  .btn-outline { border-color: var(--rule); color: var(--text-muted); }
+  .btn-outline:hover { border-color: var(--accent-dim); color: var(--text); }
+  .btn-ghost { color: var(--text-muted); }
+  .btn-ghost:hover { color: var(--text); background: var(--panel-2); }
+  .btn-sm { height: 30px; padding: 0 10px; font-size: 11px; }
+  .btn-icon { width: 34px; padding: 0; }
+
+  /* ── Hero ─────────────────────────────────────────────────────── */
+  .hero { padding: 82px 0 34px; }
+  .hero .label { display: block; margin-bottom: 20px; }
+  h1 {
+    margin: 0; font-size: 44px; line-height: 1.14; font-weight: 600;
+    letter-spacing: -0.02em; max-width: 15ch;
+  }
+  h1 em { font-style: normal; color: var(--accent); }
+  .lede { margin: 20px 0 0; max-width: 56ch; color: var(--text-muted); font-size: 16px; }
+  .rule { border: 0; border-top: 1px solid var(--rule); margin: 0; }
+
+  /* ── Transcript composer ──────────────────────────────────────── */
+  .composer { margin-top: 36px; border: 1px solid var(--rule); background: var(--panel); }
+  .composer-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px; border-bottom: 1px solid var(--rule); background: var(--panel-2);
+  }
+  .composer-head .meta { font-family: var(--mono); font-size: 11px; color: var(--text-faint); }
+  textarea {
+    display: block; width: 100%; min-height: 240px; resize: vertical;
+    border: 0; background: transparent; color: var(--text);
+    font-family: var(--mono); font-size: 13px; line-height: 1.85; padding: 18px;
+  }
+  textarea::placeholder { color: var(--text-faint); }
+  textarea:focus { outline: none; }
+  .composer:focus-within { border-color: var(--accent-dim); }
+  .dropzone {
+    display: block; text-align: center; padding: 13px;
+    border-top: 1px dashed var(--rule); color: var(--text-muted);
+    font-family: var(--mono); font-size: 12px; cursor: pointer;
+  }
+  .dropzone:hover { background: var(--panel-2); color: var(--text); }
+  .dropzone b { color: var(--accent); font-weight: 500; }
+  .composer-foot {
+    display: flex; align-items: center; gap: 12px;
+    padding: 13px 14px; border-top: 1px solid var(--rule); background: var(--panel-2);
+  }
+  .composer-foot .spacer { flex: 1; }
+  .cost { font-family: var(--mono); font-size: 11px; color: var(--text-faint); letter-spacing: .08em; }
+  .note { margin: 16px 0 0; font-size: 13px; color: var(--text-faint); font-family: var(--mono); }
+
+  /* ── Sections as ledger entries ───────────────────────────────── */
+  section { padding: 76px 0 0; }
+  .section-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 4px; }
+  .section-head h2 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.015em; }
+  .section-head .n { font-family: var(--mono); font-size: 12px; color: var(--accent-dim); }
+  .section-sub { margin: 0 0 24px; color: var(--text-muted); font-size: 15px; }
+
+  .steps { border-top: 1px solid var(--rule); }
+  .step { display: grid; grid-template-columns: 68px 1fr; gap: 22px;
+          padding: 20px 4px; border-bottom: 1px solid var(--rule-soft); }
+  .step .n { font-family: var(--mono); font-size: 12px; color: var(--accent); letter-spacing: .1em; padding-top: 3px; }
+  .step h3 { margin: 0 0 4px; font-size: 16px; font-weight: 600; }
+  .step p  { margin: 0; color: var(--text-muted); font-size: 14px; max-width: 62ch; }
+
+  /* ── Pricing ──────────────────────────────────────────────────── */
+  .prices { border-top: 1px solid var(--rule); }
+  .price-row {
+    display: grid; grid-template-columns: 200px 1fr auto; gap: 22px; align-items: baseline;
+    padding: 18px 4px; border-bottom: 1px solid var(--rule-soft);
+  }
+  .price-row .name { font-family: var(--mono); font-size: 12px; letter-spacing: .1em;
+                     text-transform: uppercase; color: var(--text); }
+  .price-row p { margin: 0; color: var(--text-muted); font-size: 14px; }
+  .price-row .amount { font-family: var(--mono); font-size: 20px; color: var(--accent); }
+
+  /* ── Footer ───────────────────────────────────────────────────── */
+  footer {
+    margin-top: 88px; border-top: 1px solid var(--rule); padding: 22px 0 48px;
+    display: flex; justify-content: space-between; font-family: var(--mono);
+    font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-faint);
+  }
+  footer nav { display: flex; gap: 20px; }
+  footer a { text-decoration: none; }
+  footer a:hover { color: var(--accent); }
+
+  /* ── Mockup scaffolding (not part of the design) ──────────────── */
+  .mockup-nav {
+    position: fixed; left: 16px; bottom: 16px; z-index: 90;
+    display: flex; align-items: center; gap: 4px;
+    padding: 5px 6px 5px 10px; border-radius: 999px;
+    background: #1c1c1e; border: 1px solid #34343a;
+    box-shadow: 0 8px 28px rgba(0,0,0,.5);
+    font: 500 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: #9a9aa2; letter-spacing: .04em;
+  }
+  .mockup-nav a { text-decoration: none; color: #d4d4d8; padding: 5px 9px; border-radius: 999px; }
+  .mockup-nav a:hover { background: #2a2a2e; }
+  .mockup-nav a[aria-current] { background: #3a3a41; color: #fff; }
+  .mockup-nav .sep { color: #4a4a52; }
+
+  @media (max-width: 820px) {
+    .wrap { padding: 0 20px; }
+    h1 { font-size: 32px; }
+    .step { grid-template-columns: 1fr; gap: 6px; }
+    .price-row { grid-template-columns: 1fr; gap: 6px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap nav-inner">
+    <a class="wordmark" href="#"><span class="mark">▸</span>ActionPoints</a>
+    <div class="nav-right">
+      <button class="btn btn-ghost btn-icon" title="Theme: system" aria-label="Theme: system">◐</button>
+      <a class="btn btn-ghost btn-sm" href="#">Sign in</a>
+      <a class="btn btn-outline btn-sm" href="#">Create account</a>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="col">
+    <div class="hero">
+      <span class="label">Transcript → Extraction → Task Sink</span>
+      <h1>Turn a meeting transcript into <em>tasks</em>.</h1>
+      <p class="lede">
+        Paste the transcript your meeting tool already made. Review the extracted
+        Action Points. Push the keepers to Linear — done before the next meeting starts.
+      </p>
+    </div>
+
+    <form class="composer" onsubmit="return false">
+      <div class="composer-head">
+        <span class="label">Transcript</span>
+        <span class="meta">0 words · 1 Credit</span>
+      </div>
+      <textarea placeholder="Paste your meeting transcript here — straight from Zoom, Teams, or Meet…" aria-label="Meeting transcript"></textarea>
+      <label class="dropzone">↑ or upload the export file — <b>.txt .vtt .srt</b></label>
+      <div class="composer-foot">
+        <button class="btn btn-primary" type="submit">Extract Action Points</button>
+        <button class="btn btn-ghost btn-sm" type="button">Try the sample meeting</button>
+        <span class="spacer"></span>
+        <span class="cost">≤ 60s</span>
+      </div>
+    </form>
+
+    <p class="note">Your transcript is only used to produce your Action Points — never shared.</p>
+
+    <section>
+      <div class="section-head"><span class="n">01</span><h2>How it works</h2></div>
+      <p class="section-sub">Three steps, no setup beyond a Linear key.</p>
+      <div class="steps">
+        <div class="step">
+          <span class="n">STEP 1</span>
+          <div>
+            <h3>Paste a transcript</h3>
+            <p>Zoom, Teams, and Meet already export one. Paste the text or drop the .txt, .vtt, or .srt file — timestamps get cleaned up for you.</p>
+          </div>
+        </div>
+        <div class="step">
+          <span class="n">STEP 2</span>
+          <div>
+            <h3>Review the Action Points</h3>
+            <p>Every commitment comes back with a title, context, an assignee guess, and any due date said aloud. Reject the noise, edit the keepers.</p>
+          </div>
+        </div>
+        <div class="step">
+          <span class="n">STEP 3</span>
+          <div>
+            <h3>Push to Linear</h3>
+            <p>One click creates the accepted Action Points as real Linear issues — with links back to each one, so nothing is lost in the meeting again.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head"><span class="n">02</span><h2>Pricing</h2></div>
+      <p class="section-sub">Pay for meetings, not seats.</p>
+      <div class="prices">
+        <div class="price-row">
+          <span class="name">Free Meeting</span>
+          <p>Every new account starts with one Credit. Your first meeting costs nothing.</p>
+          <span class="amount">£0</span>
+        </div>
+        <div class="price-row">
+          <span class="name">Pack</span>
+          <p>15 Credits. One Credit per successful Extraction. No subscription, no expiry.</p>
+          <span class="amount">£5</span>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <span>ActionPoints — 2026</span>
+      <nav>
+        <a href="#">Privacy</a>
+        <a href="#">Terms</a>
+        <a href="#">Contact</a>
+      </nav>
+    </footer>
+  </div>
+</main>
+
+<div class="mockup-nav">
+  LEDGER <span class="sep">/</span>
+  <a href="ledger-home.html" aria-current="page">Home</a>
+  <a href="ledger-review.html">Review</a>
+  <span class="sep">·</span>
+  <a href="index.html">All directions</a>
+</div>
+
+</body>
+</html>
