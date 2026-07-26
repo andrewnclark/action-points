@@ -13,6 +13,7 @@ defmodule ActionPoints.Meetings.ActionPoint do
     field :description, :string
     field :assignee_guess, :string
     field :due_date, :date
+    field :status, Ecto.Enum, values: [:accepted, :rejected], default: :accepted
 
     belongs_to :extraction, ActionPoints.Meetings.Extraction
 
@@ -22,6 +23,16 @@ defmodule ActionPoints.Meetings.ActionPoint do
   def changeset(action_point, attrs) do
     action_point
     |> cast(attrs, [:title, :description, :assignee_guess, :due_date])
+    |> validate_required([:title])
+  end
+
+  @doc """
+  Changeset for the user's edits during Review. Title stays required;
+  description, assignee guess, and due date may all be cleared.
+  """
+  def curation_changeset(action_point, attrs) do
+    action_point
+    |> cast(attrs, [:title, :description, :assignee_guess, :due_date], force_changes: true)
     |> validate_required([:title])
   end
 end
