@@ -30,6 +30,10 @@ _Avoid_: sync, export, send
 A destination system that receives pushed Action Points as tasks (Linear, and later others). Each sink is a pluggable adapter behind one interface.
 _Avoid_: integration, destination, provider
 
+**Demo**:
+The anonymous run of the pipeline from the landing page: a real Extraction and Review, keyed to the visitor's session instead of an account. Rate-limited rather than charged; signup is required only at Push, and the Demo's Review carries over through it.
+_Avoid_: preview, free preview, trial
+
 ### Commerce
 
 **Credit**:

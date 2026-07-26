@@ -1,6 +1,6 @@
 defmodule ActionPoints.RateLimiter do
   @moduledoc """
-  Fixed-window rate limiter for the anonymous landing preview, so abuse can't
+  Fixed-window rate limiter for the anonymous landing-page Demo, so abuse can't
   burn the operator's API budget. Counters live in this process's state —
   per-node and gone on restart, which is plenty for a single-node MVP.
   """

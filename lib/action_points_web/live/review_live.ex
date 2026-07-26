@@ -54,11 +54,22 @@ defmodule ActionPointsWeb.ReviewLive do
                 phx-click="push"
                 disabled={@pushing? or @pushable_count == 0}
               >
-                <%= if @pushing? do %>
-                  <span class="loading loading-spinner loading-xs" aria-hidden="true"></span> Pushing…
-                <% else %>
-                  <.icon name="hero-paper-airplane" class="size-4" />
-                  {ngettext("Push 1 Action Point", "Push %{count} Action Points", @pushable_count)}
+                <%= cond do %>
+                  <% @pushing? -> %>
+                    <span class="loading loading-spinner loading-xs" aria-hidden="true"></span>
+                    Pushing…
+                  <% is_nil(@current_scope) -> %>
+                    <%!-- The paywall boundary, stated up front: Pushing needs an
+                    account, and clicking here routes to signup with the Review kept. --%>
+                    <.icon name="hero-paper-airplane" class="size-4" />
+                    {ngettext(
+                      "Sign up to Push 1 Action Point",
+                      "Sign up to Push %{count} Action Points",
+                      @pushable_count
+                    )}
+                  <% true -> %>
+                    <.icon name="hero-paper-airplane" class="size-4" />
+                    {ngettext("Push 1 Action Point", "Push %{count} Action Points", @pushable_count)}
                 <% end %>
               </button>
             </div>

@@ -73,6 +73,12 @@ defmodule ActionPointsWeb.PushTest do
   end
 
   describe "anonymous visitor" do
+    test "the Push button reads as the signup gate", %{conn: conn} do
+      %{review: review} = open_review(conn)
+
+      assert has_element?(review, "#push-button", "Sign up to Push")
+    end
+
     test "clicking Push routes to signup, keeping the Review", %{conn: conn} do
       %{review: review} = open_review(conn)
 
