@@ -62,13 +62,11 @@ defmodule ActionPointsWeb.ExtractionFlowTest do
     {:ok, review, _html} = follow_redirect(result, conn)
 
     eventually(fn ->
-      html = render(review)
-      assert has_element?(review, "#action-points")
-      assert html =~ "Send the Q3 report to finance"
-      assert html =~ "Priya committed to sending the Q3 report"
-      assert html =~ "Priya"
-      assert html =~ "2026-07-31"
-      assert html =~ "Book the offsite venue"
+      assert has_element?(review, "#action-points li", "Send the Q3 report to finance")
+      assert has_element?(review, "#action-points li", "Priya committed to sending the Q3 report")
+      assert has_element?(review, "#action-points li", "2026-07-31")
+      assert has_element?(review, "#action-points li", "Book the offsite venue")
+      assert has_element?(review, "#action-points li", "Tom")
     end)
   end
 
@@ -107,9 +105,28 @@ defmodule ActionPointsWeb.ExtractionFlowTest do
     review |> element("#retry-extraction") |> render_click()
 
     eventually(fn ->
-      assert has_element?(review, "#action-points")
-      assert render(review) =~ "Send the Q3 report to finance"
+      assert has_element?(review, "#action-points li", "Send the Q3 report to finance")
       refute has_element?(review, "#extraction-failed")
+    end)
+  end
+
+  @tag capture_log: true
+  test "a crash inside the Extractor still lands on the error-with-retry state", %{conn: conn} do
+    stub_extractor(:crash)
+
+    conn = get(conn, ~p"/")
+    {:ok, home, _html} = live(conn)
+
+    result =
+      home
+      |> form("#transcript-form", extraction: %{transcript_text: @transcript})
+      |> render_submit()
+
+    {:ok, review, _html} = follow_redirect(result, conn)
+
+    eventually(fn ->
+      assert has_element?(review, "#extraction-failed")
+      assert has_element?(review, "#retry-extraction")
     end)
   end
 
@@ -117,12 +134,11 @@ defmodule ActionPointsWeb.ExtractionFlowTest do
     conn = get(conn, ~p"/")
     {:ok, home, _html} = live(conn)
 
-    html =
-      home
-      |> form("#transcript-form", extraction: %{transcript_text: ""})
-      |> render_submit()
+    home
+    |> form("#transcript-form", extraction: %{transcript_text: ""})
+    |> render_submit()
 
-    assert html =~ "can&#39;t be blank"
+    assert has_element?(home, "#transcript-form", "can't be blank")
     assert ActionPoints.Repo.aggregate(ActionPoints.Meetings.Extraction, :count) == 0
   end
 

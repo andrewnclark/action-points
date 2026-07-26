@@ -3,7 +3,7 @@ defmodule ActionPoints.Meetings do
   The meetings pipeline: Transcript → Extraction → Action Points → Review state.
 
   An Extraction is persisted server-side and keyed to the visitor's anonymous
-  session token, so a preview survives signup. The Extraction itself runs as a
+  session token, so their Review survives signup. The Extraction itself runs as a
   background task; progress reaches LiveViews via PubSub (`subscribe/1`).
   """
 
@@ -58,17 +58,37 @@ defmodule ActionPoints.Meetings do
   @doc """
   Resets a failed Extraction and runs it again. Failures consume no Credit,
   so retrying is always free.
+
+  The reset is a single conditional UPDATE, so two rapid retries can never
+  start two concurrent runs.
   """
-  def retry_extraction(%Extraction{status: :failed} = extraction) do
-    extraction = update_status!(extraction, %{status: :pending, failure_reason: nil})
-    broadcast(extraction)
-    start_extraction(extraction)
-    extraction
+  def retry_extraction(%Extraction{id: id}) do
+    {reset_count, _} =
+      Repo.update_all(
+        from(e in Extraction, where: e.id == ^id and e.status == :failed),
+        set: [
+          status: :pending,
+          failure_reason: nil,
+          updated_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        ]
+      )
+
+    if reset_count == 1 do
+      extraction = Repo.get!(Extraction, id)
+      broadcast(extraction)
+      start_extraction(extraction)
+    end
+
+    :ok
   end
 
   @doc """
   The background-task body: marks the Extraction running, calls the Extractor
   port, and finalises success or failure. Each transition is broadcast.
+
+  A crash anywhere in the attempt still marks the Extraction failed — the
+  Review screen must always end up on the error-with-retry state, never a
+  permanent spinner.
   """
   def run_extraction(%Extraction{} = extraction) do
     extraction = update_status!(extraction, %{status: :running})
@@ -78,11 +98,18 @@ defmodule ActionPoints.Meetings do
       {:ok, action_points} -> finalize_success(extraction, action_points)
       {:error, reason} -> finalize_failure(extraction, reason)
     end
+  rescue
+    exception ->
+      finalize_failure(extraction, :crashed)
+      reraise(exception, __STACKTRACE__)
   end
 
   defp finalize_success(extraction, action_points) do
     {:ok, extraction} =
       Repo.transaction(fn ->
+        # Idempotence: a re-run replaces, never appends
+        Repo.delete_all(from ap in ActionPoint, where: ap.extraction_id == ^extraction.id)
+
         action_points
         |> Enum.with_index(1)
         |> Enum.each(fn {attrs, position} ->
@@ -114,10 +141,12 @@ defmodule ActionPoints.Meetings do
 
   @doc """
   Subscribes the caller to status updates for one Extraction. Messages arrive
-  as `{:extraction_updated, extraction_id}`.
+  as `{:extraction_updated, extraction_id}`. Takes the id (not the struct) so
+  a LiveView can subscribe *before* fetching — otherwise an update broadcast
+  between fetch and subscribe would be lost.
   """
-  def subscribe(%Extraction{id: id}) do
-    Phoenix.PubSub.subscribe(ActionPoints.PubSub, topic(id))
+  def subscribe(extraction_id) do
+    Phoenix.PubSub.subscribe(ActionPoints.PubSub, topic(extraction_id))
   end
 
   defp broadcast(%Extraction{id: id}) do
@@ -128,15 +157,5 @@ defmodule ActionPoints.Meetings do
 
   defp extractor do
     Application.fetch_env!(:action_points, :extractor)
-  end
-
-  @doc false
-  # Used by tests and future tickets to assert what an Extraction produced.
-  def list_action_points(%Extraction{id: extraction_id}) do
-    Repo.all(
-      from ap in ActionPoint,
-        where: ap.extraction_id == ^extraction_id,
-        order_by: [asc: ap.position]
-    )
   end
 end

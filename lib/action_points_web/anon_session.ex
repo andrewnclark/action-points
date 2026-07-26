@@ -3,7 +3,7 @@ defmodule ActionPointsWeb.AnonSession do
   Gives every visitor a random session token before any LiveView mounts.
 
   Extractions are keyed to this token, which is what lets an anonymous
-  preview be persisted server-side (and later claimed at signup).
+  visitor's Review be persisted server-side (and later claimed at signup).
   """
 
   import Plug.Conn

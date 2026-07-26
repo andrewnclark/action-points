@@ -61,7 +61,7 @@ defmodule ActionPointsWeb.Router do
     live_session :current_user,
       on_mount: [{ActionPointsWeb.UserAuth, :mount_current_scope}] do
       # The landing page and Review screen work with or without authentication:
-      # anyone can preview the paste → Review flow; Push is gated later.
+      # anyone can run the paste → Review flow; only Push requires an account.
       live "/", HomeLive
       live "/review/:id", ReviewLive
 
