@@ -1,0 +1,538 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bond — Homepage — ActionPoints mockup</title>
+
+<!--
+  DIRECTION CONTRACT — "BOND"
+
+  THESIS: An Action Point is a claim under examination, not a card in a feed. This surface
+  shows the transcript and the extracted claims on one ruled sheet, tied by leader lines, and
+  refuses the dark SaaS gradient hero with a floating app screenshot.
+
+  OWN-WORLD: The utility patent drawing sheet. Warm bond ground, navy india ink, hairline
+  rules terminating in small circles, a ruled sheet border with corner zone marks, reference
+  numerals on curved leaders, carmine reserved for what is under examination, a green seal for
+  what has been granted. Libre Caslon Display heads, Public Sans text, Spline Sans Mono numerals.
+
+  STORY: The visitor sees a real transcript on the left and the commitments pulled out of it on
+  the right, numbered and traced back to the line that produced them. They believe the
+  extraction is accountable, not magic. They paste their own transcript.
+
+  FIRST VIEWPORT: Sheet head with wordmark, sheet number and date. Below it, two ruled panes —
+  FIG. 1 the transcript with three utterances marked, FIG. 2 the Action Points those utterances
+  produced, joined by drawn leaders. The composer and its primary action sit under FIG. 1.
+
+  FORM: Patent drawing sheet, candidate 4 of the grounded list, fused from the dealt challenger
+  and taking the two-key-commit staging for the Push. Seed key ap-facelift-light-1.
+-->
+
+<style>
+  @font-face {
+    font-family: 'Libre Caslon Display';
+    src: url('fonts/LibreCaslonDisplay-400.woff2') format('woff2');
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Public Sans';
+    src: url('fonts/PublicSans-var.woff2') format('woff2');
+    font-weight: 100 900; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Spline Sans Mono';
+    src: url('fonts/SplineSansMono-var.woff2') format('woff2');
+    font-weight: 300 700; font-style: normal; font-display: swap;
+  }
+
+  /* ── Bond tokens ─────────────────────────────────────────────────
+     Warm bond stock, navy india ink, one examination ink. Colour is
+     evidence: carmine means under examination, green means granted. */
+  :root {
+    --bond:        #f4f0e6;   /* the sheet stock */
+    --sheet:       #fcfaf4;   /* drawn-on surface */
+    --sheet-sunk:  #eee9dc;   /* recessed panes, table stripes */
+    --ink:         #1b2432;   /* india ink, navy-black */
+    --ink-2:       #4d5666;   /* secondary text */
+    --ink-3:       #6f7889;   /* labels, numerals, quiet metadata */
+    --rule:        #c9c2b0;   /* hairline */
+    --rule-soft:   #ded8c8;
+    --exam:        #a8322b;   /* under examination */
+    --exam-soft:   #f3e3e0;
+    --granted:     #2e5e4e;   /* sealed, created in the Task Sink */
+    --granted-soft:#e2ece7;
+    --radius:      2px;
+    --display: 'Libre Caslon Display', Georgia, serif;
+    --text:    'Public Sans', system-ui, sans-serif;
+    --num:     'Spline Sans Mono', ui-monospace, SFMono-Regular, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-font-smoothing: antialiased; }
+  body {
+    margin: 0; background: var(--bond); color: var(--ink);
+    font-family: var(--text); font-size: 15px; line-height: 1.6;
+  }
+  a { color: inherit; }
+
+  /* Every screen is a sheet: a ruled border with corner zone marks. */
+  .sheet {
+    max-width: 1240px; margin: 22px auto 40px; background: var(--sheet);
+    border: 1px solid var(--ink); position: relative;
+    box-shadow: 0 1px 0 rgba(27,36,50,.10), 0 18px 40px -28px rgba(27,36,50,.45);
+  }
+  .sheet::before {
+    content: ""; position: absolute; inset: 6px; border: 1px solid var(--rule);
+    pointer-events: none;
+  }
+  .corner {
+    position: absolute; width: 13px; height: 13px; border: 0 solid var(--ink); z-index: 2;
+  }
+  .corner.tl { top: 6px; left: 6px; border-top-width: 1px; border-left-width: 1px; }
+  .corner.tr { top: 6px; right: 6px; border-top-width: 1px; border-right-width: 1px; }
+  .corner.bl { bottom: 6px; left: 6px; border-bottom-width: 1px; border-left-width: 1px; }
+  .corner.br { bottom: 6px; right: 6px; border-bottom-width: 1px; border-right-width: 1px; }
+
+  .caps {
+    font-family: var(--num); font-size: 10.5px; font-weight: 500;
+    letter-spacing: .17em; text-transform: uppercase; color: var(--ink-3);
+  }
+
+  /* ── Sheet head: the title block ─────────────────────────────── */
+  .head {
+    display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+    gap: 24px; padding: 20px 34px 16px; border-bottom: 1px solid var(--ink);
+  }
+  .head .left, .head .right { display: flex; align-items: center; gap: 18px; }
+  .head .right { justify-content: flex-end; }
+  .wordmark {
+    font-family: var(--display); font-size: 23px; letter-spacing: .13em;
+    text-transform: uppercase; text-decoration: none; white-space: nowrap;
+  }
+  .wordmark .dot { color: var(--exam); }
+  .head .sub {
+    display: block; text-align: center; margin-top: 3px;
+    font-family: var(--num); font-size: 9.5px; letter-spacing: .28em;
+    text-transform: uppercase; color: var(--ink-3);
+  }
+  .navlink {
+    font-family: var(--num); font-size: 11px; letter-spacing: .12em;
+    text-transform: uppercase; text-decoration: none; color: var(--ink-2);
+    padding-bottom: 2px; border-bottom: 1px solid transparent;
+  }
+  .navlink:hover { color: var(--ink); border-bottom-color: var(--exam); }
+
+  /* ── Controls ────────────────────────────────────────────────── */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+    height: 40px; padding: 0 20px; border: 1px solid var(--ink); border-radius: var(--radius);
+    background: var(--sheet); color: var(--ink); cursor: pointer; text-decoration: none;
+    font-family: var(--num); font-size: 11.5px; font-weight: 500;
+    letter-spacing: .14em; text-transform: uppercase;
+    transition: background .14s ease, color .14s ease, box-shadow .14s ease;
+  }
+  .btn:hover { box-shadow: 2px 2px 0 var(--ink); transform: translate(-1px,-1px); }
+  .btn:active { box-shadow: none; transform: none; }
+  .btn:focus-visible { outline: 2px solid var(--exam); outline-offset: 3px; }
+  .btn-primary { background: var(--ink); color: var(--sheet); }
+  .btn-primary:hover { background: #0f1725; }
+  .btn-quiet { border-color: transparent; color: var(--ink-2); }
+  .btn-quiet:hover { color: var(--ink); border-color: var(--rule); box-shadow: none; transform: none; }
+  .btn-sm { height: 32px; padding: 0 13px; font-size: 10.5px; }
+
+  /* ── First viewport: two ruled panes, one drawn relationship ─── */
+  .plate { display: grid; grid-template-columns: 1.02fr 1.18fr; }
+  .pane { padding: 30px 34px 34px; }
+  .pane + .pane { border-left: 1px solid var(--ink); }
+  .pane-label {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 20px;
+  }
+  .pane-label .fig {
+    font-family: var(--num); font-size: 11px; font-weight: 500; letter-spacing: .16em;
+    color: var(--exam); text-transform: uppercase; white-space: nowrap;
+  }
+  .pane-label .lead-rule { flex: 1; height: 1px; background: var(--rule); position: relative; }
+  .pane-label .lead-rule::after {
+    content: ""; position: absolute; right: 0; top: -2px;
+    width: 5px; height: 5px; border: 1px solid var(--rule);
+    border-radius: 50%; background: var(--sheet);
+  }
+
+  h1 {
+    font-family: var(--display); font-weight: 400; margin: 0;
+    font-size: 50px; line-height: 1.04; letter-spacing: -0.012em;
+  }
+  h1 .exam { color: var(--exam); }
+  .lede {
+    margin: 18px 0 0; max-width: 44ch; font-size: 16px; color: var(--ink-2); line-height: 1.62;
+  }
+
+  /* Composer */
+  .composer { margin-top: 26px; border: 1px solid var(--ink); background: var(--sheet); }
+  .composer-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 13px; border-bottom: 1px solid var(--rule); background: var(--sheet-sunk);
+  }
+  textarea {
+    display: block; width: 100%; min-height: 148px; resize: vertical; border: 0;
+    background: transparent; color: var(--ink); padding: 15px;
+    font-family: var(--text); font-size: 14.5px; line-height: 1.7;
+  }
+  textarea::placeholder { color: var(--ink-3); }
+  textarea:focus { outline: none; }
+  .composer:focus-within { box-shadow: 0 0 0 2px var(--exam-soft); border-color: var(--exam); }
+  .dropzone {
+    display: block; text-align: center; padding: 10px;
+    border-top: 1px dashed var(--rule); cursor: pointer;
+    font-family: var(--num); font-size: 11px; letter-spacing: .06em; color: var(--ink-2);
+  }
+  .dropzone:hover { background: var(--sheet-sunk); color: var(--ink); }
+  .dropzone b { color: var(--ink); font-weight: 500; }
+  .composer-foot {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 13px; border-top: 1px solid var(--rule); background: var(--sheet-sunk);
+  }
+  .composer-foot .spacer { flex: 1; }
+  .note { margin: 13px 0 0; font-size: 13px; color: var(--ink-3); }
+
+  /* FIG. 1 — the transcript, with the marked utterances */
+  .transcript {
+    border: 1px solid var(--rule); background: var(--sheet-sunk);
+    font-size: 13.5px; line-height: 1.85;
+  }
+  .transcript .line {
+    display: grid; grid-template-columns: 34px 1fr; gap: 10px;
+    padding: 3px 12px 3px 8px; position: relative;
+  }
+  .transcript .ln {
+    font-family: var(--num); font-size: 10.5px; color: var(--ink-3);
+    text-align: right; padding-top: 3px; user-select: none;
+  }
+  .transcript .who { font-weight: 600; }
+  .transcript .line.is-marked { background: var(--sheet); box-shadow: inset 0 0 0 1px var(--exam-soft); }
+  .transcript .line.is-marked .say { box-shadow: inset 0 -8px 0 var(--exam-soft); }
+  .transcript .tag {
+    position: absolute; right: 8px; top: 3px;
+    font-family: var(--num); font-size: 10px; font-weight: 500; color: var(--exam);
+    letter-spacing: .08em;
+  }
+
+  /* FIG. 2 — the extracted claims */
+  .claims { display: grid; gap: 12px; }
+  .claim {
+    display: grid; grid-template-columns: 30px 1fr; gap: 14px;
+    border: 1px solid var(--rule); background: var(--sheet); padding: 13px 15px;
+    position: relative;
+  }
+  .claim .numeral {
+    font-family: var(--num); font-size: 15px; font-weight: 500; color: var(--exam);
+    line-height: 1.3;
+  }
+  .claim h3 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.008em; line-height: 1.35; }
+  .claim p { margin: 5px 0 0; font-size: 13px; color: var(--ink-2); }
+  .spec {
+    display: grid; grid-template-columns: auto 1fr; gap: 3px 14px; margin-top: 11px;
+    font-family: var(--num); font-size: 11px; letter-spacing: .04em;
+  }
+  .spec dt { color: var(--ink-3); text-transform: uppercase; letter-spacing: .13em; }
+  .spec dd { margin: 0; color: var(--ink); }
+  .spec dd.none { color: var(--ink-3); }
+
+  .plate-foot {
+    grid-column: 1 / -1; border-top: 1px solid var(--ink);
+    padding: 13px 34px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    background: var(--sheet-sunk);
+  }
+  .plate-foot .spacer { flex: 1; }
+  .plate-foot .caps { color: var(--ink-2); }
+
+  /* ── Procedure: how it works, as sheet notes ─────────────────── */
+  .band { border-top: 1px solid var(--ink); padding: 40px 34px 44px; }
+  .band-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 26px; }
+  h2 {
+    font-family: var(--display); font-weight: 400; margin: 0;
+    font-size: 30px; letter-spacing: -0.01em;
+  }
+  .band-head .rule { flex: 1; height: 1px; background: var(--rule); }
+
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); }
+  .step { padding: 0 26px; border-left: 1px solid var(--rule); }
+  .step:first-child { padding-left: 0; border-left: 0; }
+  .step:last-child { padding-right: 0; }
+  .step .numeral {
+    font-family: var(--num); font-size: 11px; font-weight: 500; letter-spacing: .16em;
+    color: var(--exam); text-transform: uppercase;
+  }
+  .step h3 { font-family: var(--display); font-weight: 400; margin: 9px 0 7px; font-size: 20px; }
+  .step p { margin: 0; font-size: 14px; color: var(--ink-2); max-width: 38ch; }
+
+  /* ── Schedule of charges ─────────────────────────────────────── */
+  .charges { width: 100%; border-collapse: collapse; }
+  .charges caption { text-align: left; padding-bottom: 12px; }
+  .charges th, .charges td { text-align: left; padding: 14px 16px; border-bottom: 1px solid var(--rule-soft); }
+  .charges thead th {
+    font-family: var(--num); font-size: 10.5px; font-weight: 500; letter-spacing: .16em;
+    text-transform: uppercase; color: var(--ink-3); border-bottom: 1px solid var(--ink); padding-bottom: 9px;
+  }
+  .charges tbody th { font-weight: 600; font-size: 15px; width: 190px; }
+  .charges td.amount { font-family: var(--num); font-size: 17px; width: 130px; }
+  .charges td p { margin: 0; font-size: 14px; color: var(--ink-2); }
+  .charges tr:last-child td, .charges tr:last-child th { border-bottom: 0; }
+
+  /* ── Sheet foot ──────────────────────────────────────────────── */
+  .foot {
+    border-top: 1px solid var(--ink); padding: 15px 34px;
+    display: flex; align-items: center; justify-content: space-between; gap: 20px;
+    background: var(--sheet-sunk);
+  }
+  .foot nav { display: flex; gap: 22px; }
+
+  /* One authored moment: the leaders draw themselves, once. */
+  .leaders { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
+  .leaders path {
+    fill: none; stroke: var(--exam); stroke-width: 1; opacity: .55;
+    stroke-dasharray: 460; stroke-dashoffset: 460;
+    animation: draw 1.15s cubic-bezier(.16,1,.3,1) forwards;
+  }
+  .leaders path:nth-child(2) { animation-delay: .13s; }
+  .leaders path:nth-child(3) { animation-delay: .26s; }
+  .leaders circle { fill: var(--exam); opacity: 0; animation: dot .3s ease-out .9s forwards; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  @keyframes dot  { to { opacity: .7; } }
+  @media (prefers-reduced-motion: reduce) {
+    .leaders path { animation: none; stroke-dashoffset: 0; }
+    .leaders circle { animation: none; opacity: .7; }
+  }
+
+  /* ── Mockup scaffolding (not part of the design) ─────────────── */
+  .mockup-nav {
+    position: fixed; left: 16px; bottom: 16px; z-index: 90;
+    display: flex; align-items: center; gap: 4px;
+    padding: 5px 6px 5px 10px; border-radius: 999px;
+    background: #1c1c1e; border: 1px solid #34343a;
+    box-shadow: 0 8px 28px rgba(0,0,0,.5);
+    font: 500 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: #9a9aa2; letter-spacing: .04em;
+  }
+  .mockup-nav a { text-decoration: none; color: #d4d4d8; padding: 5px 9px; border-radius: 999px; }
+  .mockup-nav a:hover { background: #2a2a2e; }
+  .mockup-nav a[aria-current] { background: #3a3a41; color: #fff; }
+  .mockup-nav .sep { color: #4a4a52; }
+
+  @media (max-width: 1000px) {
+    .plate { grid-template-columns: 1fr; }
+    .pane + .pane { border-left: 0; border-top: 1px solid var(--ink); }
+    .leaders { display: none; }
+    h1 { font-size: 38px; }
+    .steps { grid-template-columns: 1fr; gap: 26px; }
+    .step { padding: 0; border-left: 0; }
+  }
+  @media (max-width: 680px) {
+    .sheet { margin: 10px; }
+    .pane, .band, .foot, .head { padding-left: 18px; padding-right: 18px; }
+    .head { grid-template-columns: 1fr; gap: 12px; text-align: center; }
+    .head .left, .head .right { justify-content: center; flex-wrap: wrap; }
+    h1 { font-size: 32px; }
+    .charges thead { display: none; }
+    .charges tbody th, .charges td { display: block; border-bottom: 0; padding: 4px 0; }
+    .charges tbody tr { display: block; border-bottom: 1px solid var(--rule-soft); padding: 14px 0; }
+  }
+</style>
+</head>
+<body>
+
+<div class="sheet">
+  <span class="corner tl"></span><span class="corner tr"></span>
+  <span class="corner bl"></span><span class="corner br"></span>
+
+  <header class="head">
+    <div class="left">
+      <span class="caps">Sheet 1 of 1</span>
+      <a class="navlink" href="#procedure">Procedure</a>
+      <a class="navlink" href="#charges">Charges</a>
+    </div>
+    <div>
+      <a class="wordmark" href="#">Action<span class="dot">·</span>Points</a>
+      <span class="sub">Transcript to tasks</span>
+    </div>
+    <div class="right">
+      <a class="navlink" href="#">Sign in</a>
+      <a class="btn btn-sm" href="#">Create account</a>
+    </div>
+  </header>
+
+  <div class="plate">
+    <svg class="leaders" viewBox="0 0 1240 780" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M 560 372 C 606 372 600 300 646 300" />
+      <path d="M 560 432 C 610 432 604 424 646 424" />
+      <path d="M 560 492 C 606 492 602 548 646 548" />
+      <circle cx="646" cy="300" r="2.5" />
+      <circle cx="646" cy="424" r="2.5" />
+      <circle cx="646" cy="548" r="2.5" />
+    </svg>
+
+    <section class="pane">
+      <div class="pane-label">
+        <span class="fig">Fig. 1 — Transcript</span>
+        <span class="lead-rule"></span>
+      </div>
+
+      <h1>Every promise made<br>in the meeting,<br><span class="exam">accounted for</span>.</h1>
+      <p class="lede">
+        Paste the transcript your meeting tool already made. ActionPoints returns the
+        commitments in it — each one traced back to the line that produced it — for you to
+        approve, one at a time, before anything is created.
+      </p>
+
+      <form class="composer" onsubmit="return false">
+        <div class="composer-head">
+          <span class="caps">Specimen · Product sync · 26 Jul</span>
+          <span class="caps">1 Credit</span>
+        </div>
+        <div class="transcript">
+          <div class="line"><span class="ln">11</span><span class="say"><span class="who">Maya:</span> Good. Priya, the onboarding emails?</span></div>
+          <div class="line is-marked"><span class="ln">12</span><span class="say"><span class="who">Priya:</span> Drafted. I'll send the final versions to Maya for sign-off tomorrow.</span><span class="tag">23</span></div>
+          <div class="line"><span class="ln">13</span><span class="say"><span class="who">Maya:</span> Please. And someone needs to chase legal about the updated terms.</span></div>
+          <div class="line is-marked"><span class="ln">14</span><span class="say"><span class="who">Dan:</span> I can take that. I'll email Sofia in legal today and ask for a yes/no by Friday.</span><span class="tag">24</span></div>
+          <div class="line"><span class="ln">15</span><span class="say"><span class="who">Priya:</span> One more thing — the signup form still breaks on Safari.</span></div>
+          <div class="line is-marked"><span class="ln">16</span><span class="say"><span class="who">Maya:</span> Dan, can you pick up the Safari signup bug once the pricing table's out the door?</span><span class="tag">25</span></div>
+        </div>
+        <label class="dropzone">↑ or upload the export file — <b>.txt .vtt .srt</b></label>
+        <div class="composer-foot">
+          <button class="btn btn-primary" type="submit">Extract Action Points</button>
+          <button class="btn btn-quiet btn-sm" type="button">Use this sample</button>
+          <span class="spacer"></span>
+          <span class="caps">Under 60s</span>
+        </div>
+      </form>
+      <p class="note">Your transcript is only used to produce your Action Points — never shared.</p>
+    </section>
+
+    <section class="pane">
+      <div class="pane-label">
+        <span class="fig">Fig. 2 — Action Points extracted</span>
+        <span class="lead-rule"></span>
+      </div>
+
+      <div class="claims">
+        <article class="claim">
+          <span class="numeral">23</span>
+          <div>
+            <h3>Send the final onboarding emails to Maya for sign-off</h3>
+            <p>Drafts are done. Priya sends the final versions tomorrow for Maya's approval before launch.</p>
+            <dl class="spec">
+              <dt>Assignee</dt><dd>Priya Raman</dd>
+              <dt>Due</dt><dd>27 Jul 2026</dd>
+              <dt>Source</dt><dd>Line 12</dd>
+            </dl>
+          </div>
+        </article>
+
+        <article class="claim">
+          <span class="numeral">24</span>
+          <div>
+            <h3>Get legal sign-off on the updated terms</h3>
+            <p>Dan emails Sofia in legal today and asks for a yes or no by Friday, before the switch is flipped.</p>
+            <dl class="spec">
+              <dt>Assignee</dt><dd>Dan Whitlock</dd>
+              <dt>Due</dt><dd>31 Jul 2026</dd>
+              <dt>Source</dt><dd>Line 14</dd>
+            </dl>
+          </div>
+        </article>
+
+        <article class="claim">
+          <span class="numeral">25</span>
+          <div>
+            <h3>Fix the signup form on Safari</h3>
+            <p>Jonas is out this week, so Dan picks it up once the pricing table ships.</p>
+            <dl class="spec">
+              <dt>Assignee</dt><dd>Dan Whitlock</dd>
+              <dt>Due</dt><dd class="none">None said aloud</dd>
+              <dt>Source</dt><dd>Line 16</dd>
+            </dl>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <div class="plate-foot">
+      <span class="caps">Specimen extraction · 6 Action Points from a 14-minute meeting · fictional data</span>
+      <span class="spacer"></span>
+      <a class="btn btn-sm" href="bond-review.html">See the Review sheet →</a>
+    </div>
+  </div>
+
+  <section class="band" id="procedure">
+    <div class="band-head">
+      <h2>Procedure</h2>
+      <span class="rule"></span>
+      <span class="caps">Three steps</span>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <span class="numeral">Step one</span>
+        <h3>Paste a transcript</h3>
+        <p>Zoom, Teams, and Meet already export one. Paste the text or drop the .txt, .vtt, or .srt file — timestamps get cleaned up for you.</p>
+      </div>
+      <div class="step">
+        <span class="numeral">Step two</span>
+        <h3>Review the Action Points</h3>
+        <p>Every commitment comes back with a title, context, an assignee guess, and any due date said aloud. Reject the noise, edit the keepers.</p>
+      </div>
+      <div class="step">
+        <span class="numeral">Step three</span>
+        <h3>Push to Linear</h3>
+        <p>One click creates the accepted Action Points as real Linear issues — with links back to each one, so nothing is lost in the meeting again.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="charges">
+    <table class="charges">
+      <caption>
+        <span class="band-head" style="display:flex">
+          <h2>Schedule of charges</h2>
+          <span class="rule"></span>
+          <span class="caps">No subscription</span>
+        </span>
+      </caption>
+      <thead>
+        <tr><th scope="col">Item</th><th scope="col">Terms</th><th scope="col">Amount</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">Free Meeting</th>
+          <td><p>One Credit, granted with every new account. Your first Extraction costs nothing.</p></td>
+          <td class="amount">£0</td>
+        </tr>
+        <tr>
+          <th scope="row">Pack</th>
+          <td><p>15 Credits. One Credit per successful Extraction — a failed Extraction is never charged.</p></td>
+          <td class="amount">£5</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <footer class="foot">
+    <span class="caps">ActionPoints · 2026</span>
+    <nav>
+      <a class="navlink" href="#">Privacy</a>
+      <a class="navlink" href="#">Terms</a>
+      <a class="navlink" href="#">Contact</a>
+    </nav>
+  </footer>
+</div>
+
+<div class="mockup-nav">
+  BOND <span class="sep">/</span>
+  <a href="bond-home.html" aria-current="page">Home</a>
+  <a href="bond-review.html">Review</a>
+  <span class="sep">·</span>
+  <a href="index.html">All directions</a>
+</div>
+
+</body>
+</html>

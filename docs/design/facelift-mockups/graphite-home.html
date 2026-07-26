@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Graphite — Homepage — ActionPoints mockup</title>
+<style>
+  @font-face {
+    font-family: 'Inter';
+    src: url('fonts/Inter-var.woff2') format('woff2');
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: swap;
+  }
+
+  /* ── Graphite tokens ─────────────────────────────────────────────
+     Cold, neutral, dense. One electric accent, nothing else shouts. */
+  :root {
+    --bg:           #0b0d10;
+    --surface:      #14171c;
+    --surface-2:    #1a1e24;
+    --border:       #262b33;
+    --border-soft:  #1e222a;
+    --text:         #e6e8eb;
+    --text-muted:   #8b929c;
+    --text-faint:   #626a75;
+    --accent:       #6e7bff;
+    --accent-hi:    #8b95ff;
+    --accent-ink:   #0b0d10;
+    --success:      #3ecf8e;
+    --danger:       #f2555a;
+    --radius:       6px;
+    --radius-sm:    4px;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-font-smoothing: antialiased; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.55;
+    letter-spacing: -0.006em;
+  }
+  a { color: inherit; }
+
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 32px; }
+  .col  { max-width: 660px; margin: 0 auto; }
+  .band { max-width: 940px; margin: 0 auto; }
+
+  /* ── Navigation shell ─────────────────────────────────────────── */
+  .nav {
+    position: sticky; top: 0; z-index: 20;
+    border-bottom: 1px solid var(--border-soft);
+    background: rgba(11, 13, 16, 0.82);
+    backdrop-filter: blur(12px);
+  }
+  .nav-inner {
+    display: flex; align-items: center; justify-content: space-between;
+    height: 52px;
+  }
+  .wordmark {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-weight: 600; font-size: 14px; letter-spacing: -0.02em;
+    text-decoration: none;
+  }
+  .wordmark .glyph {
+    width: 18px; height: 18px; border-radius: var(--radius-sm);
+    background: linear-gradient(150deg, var(--accent-hi), var(--accent));
+    display: grid; place-items: center;
+    color: var(--accent-ink); font-size: 11px; font-weight: 700;
+  }
+  .nav-right { display: flex; align-items: center; gap: 6px; }
+
+  /* ── Controls ─────────────────────────────────────────────────── */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    height: 34px; padding: 0 14px;
+    border-radius: var(--radius); border: 1px solid transparent;
+    font: inherit; font-weight: 500; font-size: 13px;
+    cursor: pointer; text-decoration: none;
+    transition: background .12s ease, border-color .12s ease, color .12s ease;
+  }
+  .btn:focus-visible { outline: 2px solid var(--accent-hi); outline-offset: 2px; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent-hi); }
+  .btn-ghost { color: var(--text-muted); background: transparent; }
+  .btn-ghost:hover { color: var(--text); background: var(--surface-2); }
+  .btn-outline { border-color: var(--border); color: var(--text); background: transparent; }
+  .btn-outline:hover { border-color: #39414d; background: var(--surface); }
+  .btn-lg { height: 40px; font-size: 14px; padding: 0 18px; width: 100%; }
+  .btn-icon { width: 32px; height: 32px; padding: 0; }
+
+  .kbd {
+    font-size: 11px; color: var(--text-faint);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 1px 5px;
+  }
+
+  /* ── Hero ─────────────────────────────────────────────────────── */
+  .hero { padding: 76px 0 30px; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 11px; font-weight: 500; letter-spacing: .07em; text-transform: uppercase;
+    color: var(--text-faint);
+    border: 1px solid var(--border-soft); border-radius: 999px;
+    padding: 4px 11px; margin-bottom: 22px;
+  }
+  .eyebrow .dot {
+    width: 5px; height: 5px; border-radius: 50%; background: var(--accent);
+    box-shadow: 0 0 0 3px rgba(110, 123, 255, .16);
+  }
+  h1 {
+    margin: 0; font-size: 46px; line-height: 1.06;
+    letter-spacing: -0.033em; font-weight: 600;
+  }
+  h1 .em { color: var(--accent-hi); }
+  .lede {
+    margin: 18px 0 0; max-width: 560px;
+    font-size: 16px; color: var(--text-muted); line-height: 1.6;
+  }
+
+  /* ── Transcript composer ──────────────────────────────────────── */
+  .composer {
+    margin-top: 34px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface);
+    overflow: hidden;
+  }
+  .composer-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 9px 12px 9px 14px;
+    border-bottom: 1px solid var(--border-soft);
+    background: var(--surface-2);
+  }
+  .composer-title {
+    font-size: 11px; font-weight: 500; letter-spacing: .07em;
+    text-transform: uppercase; color: var(--text-faint);
+  }
+  textarea {
+    display: block; width: 100%; min-height: 232px; resize: vertical;
+    border: 0; background: transparent; color: var(--text);
+    font: inherit; font-size: 14px; line-height: 1.7; padding: 16px;
+  }
+  textarea::placeholder { color: var(--text-faint); }
+  textarea:focus { outline: none; }
+  .composer:focus-within { border-color: #39414d; }
+
+  .dropzone {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    border-top: 1px dashed var(--border);
+    padding: 11px; font-size: 13px; color: var(--text-muted);
+    cursor: pointer; transition: background .12s ease, color .12s ease;
+  }
+  .dropzone:hover { background: var(--surface-2); color: var(--text); }
+  .dropzone strong { color: var(--text); font-weight: 500; }
+
+  .composer-actions {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 14px; border-top: 1px solid var(--border-soft);
+    background: var(--surface-2);
+  }
+  .composer-actions .btn-primary { width: auto; padding: 0 16px; height: 34px; }
+  .composer-actions .spacer { flex: 1; }
+
+  .note {
+    margin: 14px 0 0; font-size: 12px; color: var(--text-faint);
+    display: flex; align-items: center; gap: 7px;
+  }
+
+  /* ── Steps ────────────────────────────────────────────────────── */
+  section { padding: 74px 0 0; }
+  h2 {
+    margin: 0 0 6px; font-size: 12px; font-weight: 500;
+    letter-spacing: .09em; text-transform: uppercase; color: var(--text-faint);
+  }
+  .section-lede { margin: 0 0 26px; font-size: 20px; letter-spacing: -0.02em; }
+
+  .steps { display: grid; gap: 1px; background: var(--border-soft);
+           border: 1px solid var(--border-soft); border-radius: var(--radius);
+           grid-template-columns: repeat(3, 1fr); overflow: hidden; }
+  .step { background: var(--surface); padding: 20px; }
+  .step .n {
+    font-size: 11px; font-weight: 600; letter-spacing: .08em;
+    color: var(--accent-hi); text-transform: uppercase;
+  }
+  .step h3 { margin: 8px 0 6px; font-size: 15px; font-weight: 600; letter-spacing: -0.015em; }
+  .step p { margin: 0; font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+
+  /* ── Pricing ──────────────────────────────────────────────────── */
+  .price-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .price {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); padding: 22px;
+  }
+  .price.is-featured { border-color: rgba(110,123,255,.45); background:
+    linear-gradient(180deg, rgba(110,123,255,.07), rgba(110,123,255,0) 62%), var(--surface); }
+  .price .label { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-faint); }
+  .price .amount { margin: 10px 0 2px; font-size: 30px; font-weight: 600; letter-spacing: -0.03em; }
+  .price .amount span { font-size: 14px; color: var(--text-muted); font-weight: 400; letter-spacing: 0; }
+  .price p { margin: 8px 0 0; font-size: 13px; color: var(--text-muted); }
+
+  /* ── Footer ───────────────────────────────────────────────────── */
+  footer {
+    margin-top: 84px; border-top: 1px solid var(--border-soft);
+    padding: 22px 0 40px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 12px; color: var(--text-faint);
+  }
+  footer nav { display: flex; gap: 18px; }
+  footer a { text-decoration: none; }
+  footer a:hover { color: var(--text-muted); }
+
+  /* ── Mockup scaffolding (not part of the design) ──────────────── */
+  .mockup-nav {
+    position: fixed; left: 16px; bottom: 16px; z-index: 90;
+    display: flex; align-items: center; gap: 4px;
+    padding: 5px 6px 5px 10px; border-radius: 999px;
+    background: #1c1c1e; border: 1px solid #34343a;
+    box-shadow: 0 8px 28px rgba(0,0,0,.5);
+    font: 500 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: #9a9aa2; letter-spacing: .04em;
+  }
+  .mockup-nav a {
+    text-decoration: none; color: #d4d4d8; padding: 5px 9px; border-radius: 999px;
+  }
+  .mockup-nav a:hover { background: #2a2a2e; }
+  .mockup-nav a[aria-current] { background: #3a3a41; color: #fff; }
+  .mockup-nav .sep { color: #4a4a52; }
+
+  @media (max-width: 820px) {
+    .wrap { padding: 0 18px; }
+    h1 { font-size: 34px; }
+    .steps, .price-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap nav-inner">
+    <a class="wordmark" href="#"><span class="glyph">▲</span>ActionPoints</a>
+    <div class="nav-right">
+      <button class="btn btn-ghost btn-icon" title="Theme: system" aria-label="Theme: system">◐</button>
+      <a class="btn btn-ghost" href="#">Sign in</a>
+      <a class="btn btn-outline" href="#">Create account</a>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+ <div class="col">
+  <div class="hero">
+    <span class="eyebrow"><span class="dot"></span>Transcript in, tasks out</span>
+    <h1>Turn a meeting transcript<br>into <span class="em">tasks</span>.</h1>
+    <p class="lede">
+      Paste the transcript your meeting tool already made. Review the extracted
+      Action Points. Push the keepers to Linear — done before the next meeting starts.
+    </p>
+  </div>
+
+  <form class="composer" onsubmit="return false">
+    <div class="composer-head">
+      <span class="composer-title">Transcript</span>
+      <span class="kbd">⌘↵ to extract</span>
+    </div>
+    <textarea placeholder="Paste your meeting transcript here — straight from Zoom, Teams, or Meet…" aria-label="Meeting transcript"></textarea>
+    <label class="dropzone">
+      ↑ or upload the export file — <strong>.txt, .vtt, .srt</strong>
+    </label>
+    <div class="composer-actions">
+      <button class="btn btn-primary" type="submit">Extract Action Points</button>
+      <button class="btn btn-ghost" type="button">No transcript to hand? Try the sample meeting</button>
+      <span class="spacer"></span>
+      <span class="kbd">1 Credit</span>
+    </div>
+  </form>
+
+  <p class="note">🔒 Your transcript is only used to produce your Action Points — never shared.</p>
+ </div>
+
+ <div class="band">
+  <section>
+    <h2>How it works</h2>
+    <p class="section-lede">Three steps, no setup beyond a Linear key.</p>
+    <div class="steps">
+      <div class="step">
+        <span class="n">Step 1</span>
+        <h3>Paste a transcript</h3>
+        <p>Zoom, Teams, and Meet already export one. Paste the text or drop the .txt, .vtt, or .srt file — timestamps get cleaned up for you.</p>
+      </div>
+      <div class="step">
+        <span class="n">Step 2</span>
+        <h3>Review the Action Points</h3>
+        <p>Every commitment comes back with a title, context, an assignee guess, and any due date said aloud. Reject the noise, edit the keepers.</p>
+      </div>
+      <div class="step">
+        <span class="n">Step 3</span>
+        <h3>Push to Linear</h3>
+        <p>One click creates the accepted Action Points as real Linear issues — with links back to each one, so nothing is lost in the meeting again.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Pricing</h2>
+    <p class="section-lede">Pay for meetings, not seats.</p>
+    <div class="price-row">
+      <div class="price">
+        <span class="label">Free Meeting</span>
+        <div class="amount">£0</div>
+        <p>Every new account starts with one Credit. Your first meeting costs nothing.</p>
+      </div>
+      <div class="price is-featured">
+        <span class="label">Pack</span>
+        <div class="amount">£5 <span>/ 15 meetings</span></div>
+        <p>One Credit per successful Extraction. No subscription, no expiry.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>ActionPoints</span>
+    <nav>
+      <a href="#">Privacy</a>
+      <a href="#">Terms</a>
+      <a href="#">Contact</a>
+    </nav>
+  </footer>
+ </div>
+</main>
+
+<div class="mockup-nav">
+  GRAPHITE <span class="sep">/</span>
+  <a href="graphite-home.html" aria-current="page">Home</a>
+  <a href="graphite-review.html">Review</a>
+  <span class="sep">·</span>
+  <a href="index.html">All directions</a>
+</div>
+
+</body>
+</html>
