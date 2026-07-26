@@ -2,6 +2,7 @@ defmodule ActionPointsWeb.Router do
   use ActionPointsWeb, :router
 
   import ActionPointsWeb.UserAuth
+  import ActionPointsWeb.AnonSession
 
   pipeline :browser do
     plug :accepts, ["html"]
@@ -11,16 +12,11 @@ defmodule ActionPointsWeb.Router do
     plug :protect_from_forgery
     plug :put_secure_browser_headers
     plug :fetch_current_scope_for_user
+    plug :fetch_anon_session_token
   end
 
   pipeline :api do
     plug :accepts, ["json"]
-  end
-
-  scope "/", ActionPointsWeb do
-    pipe_through :browser
-
-    get "/", PageController, :home
   end
 
   # Other scopes may use custom stacks.
@@ -64,6 +60,11 @@ defmodule ActionPointsWeb.Router do
 
     live_session :current_user,
       on_mount: [{ActionPointsWeb.UserAuth, :mount_current_scope}] do
+      # The landing page and Review screen work with or without authentication:
+      # anyone can preview the paste → Review flow; Push is gated later.
+      live "/", HomeLive
+      live "/review/:id", ReviewLive
+
       live "/users/register", UserLive.Registration, :new
       live "/users/log-in", UserLive.Login, :new
       live "/users/log-in/:token", UserLive.Confirmation, :new

@@ -35,3 +35,7 @@ action_points-*.tar
 npm-debug.log
 /assets/node_modules/
 
+
+# Local secrets and per-machine Claude Code settings.
+.env
+.claude/settings.local.json
