@@ -74,6 +74,22 @@ if config_env() == :prod do
 
   config :action_points, ActionPoints.Vault, key: sink_encryption_key
 
+  # Magic-link login is the only way in, so the mailer must deliver somehow.
+  # With a RESEND_API_KEY we send real email; without one we log the full
+  # message — link included — so it can be read with `fly logs`. That is a
+  # friends-test stopgap, not a launch posture: links in logs are visible to
+  # anyone with Fly access to this org.
+  if resend_api_key = System.get_env("RESEND_API_KEY") do
+    config :action_points, ActionPoints.Mailer,
+      adapter: Swoosh.Adapters.Resend,
+      api_key: resend_api_key
+  else
+    config :action_points, ActionPoints.Mailer,
+      adapter: Swoosh.Adapters.Logger,
+      log_full_email: true,
+      level: :info
+  end
+
   host = System.get_env("PHX_HOST") || "example.com"
   port = String.to_integer(System.get_env("PORT") || "4000")
 
