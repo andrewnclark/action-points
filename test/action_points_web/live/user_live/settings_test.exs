@@ -7,13 +7,13 @@ defmodule ActionPointsWeb.UserLive.SettingsTest do
 
   describe "Settings page" do
     test "renders settings page", %{conn: conn} do
-      {:ok, _lv, html} =
+      {:ok, lv, _html} =
         conn
         |> log_in_user(user_fixture())
         |> live(~p"/users/settings")
 
-      assert html =~ "Change Email"
-      assert html =~ "Save Password"
+      assert has_element?(lv, "#email_form button", "Change email")
+      assert has_element?(lv, "#password_form button", "Save password")
     end
 
     test "redirects if user is not logged in", %{conn: conn} do
@@ -70,7 +70,7 @@ defmodule ActionPointsWeb.UserLive.SettingsTest do
           "user" => %{"email" => "with spaces"}
         })
 
-      assert result =~ "Change Email"
+      assert result =~ "Change email"
       assert result =~ "must have the @ sign and no spaces"
     end
 
@@ -84,7 +84,7 @@ defmodule ActionPointsWeb.UserLive.SettingsTest do
         })
         |> render_submit()
 
-      assert result =~ "Change Email"
+      assert result =~ "Change email"
       assert result =~ "did not change"
     end
   end
@@ -136,7 +136,7 @@ defmodule ActionPointsWeb.UserLive.SettingsTest do
           }
         })
 
-      assert result =~ "Save Password"
+      assert result =~ "Save password"
       assert result =~ "should be at least 12 character(s)"
       assert result =~ "does not match password"
     end
@@ -154,7 +154,7 @@ defmodule ActionPointsWeb.UserLive.SettingsTest do
         })
         |> render_submit()
 
-      assert result =~ "Save Password"
+      assert result =~ "Save password"
       assert result =~ "should be at least 12 character(s)"
       assert result =~ "does not match password"
     end

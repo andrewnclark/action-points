@@ -236,3 +236,16 @@
     }
   }
 }
+
+/* daisyUI emits its control classes into Tailwind's `utilities` layer, which
+   outranks `components` whatever the specificity — so a focused field kept
+   daisyUI's neutral ring while every other control took the accent one. The
+   override has to live in the same layer to reach it. */
+@layer utilities {
+  .input:focus,
+  .input:focus-within,
+  .textarea:focus,
+  .select:focus {
+    outline-color: var(--color-accent);
+  }
+}

@@ -299,4 +299,51 @@ defmodule ActionPoints.MeetingsTest do
       end
     end
   end
+
+  describe "session_review_pushable_count/1" do
+    defp run_demo(session_token) do
+      {:ok, extraction} =
+        Meetings.create_extraction(nil, session_token, %{"transcript_text" => @transcript})
+
+      Meetings.run_extraction(extraction)
+      extraction
+    end
+
+    test "counts the Action Points waiting to Push on this session's Demo Review" do
+      run_demo("visitor-session")
+
+      assert Meetings.session_review_pushable_count("visitor-session") == 1
+    end
+
+    test "counts the most recent Review when the visitor ran the Demo twice" do
+      run_demo("visitor-session")
+      latest = run_demo("visitor-session")
+
+      [action_point] = Meetings.get_extraction!(latest.id, "visitor-session").action_points
+      Meetings.set_action_point_status(action_point, :rejected)
+
+      assert Meetings.session_review_pushable_count("visitor-session") == 0
+    end
+
+    test "answers nothing for a session that never ran the Demo" do
+      run_demo("visitor-session")
+
+      refute Meetings.session_review_pushable_count("other-session")
+      refute Meetings.session_review_pushable_count(nil)
+    end
+
+    test "answers nothing once the Extraction belongs to an account" do
+      run_demo("visitor-session")
+      Meetings.claim_session_extractions(user_fixture(), "visitor-session")
+
+      refute Meetings.session_review_pushable_count("visitor-session")
+    end
+
+    test "answers nothing while the Extraction has not succeeded" do
+      {:ok, _extraction} =
+        Meetings.create_extraction(nil, "visitor-session", %{"transcript_text" => @transcript})
+
+      refute Meetings.session_review_pushable_count("visitor-session")
+    end
+  end
 end
