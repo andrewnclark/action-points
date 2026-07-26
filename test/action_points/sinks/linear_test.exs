@@ -95,14 +95,18 @@ defmodule ActionPoints.Sinks.LinearTest do
              {:ok, [%{id: "team-1", name: "Engineering"}, %{id: "team-2", name: "Design"}]}
   end
 
-  test "list_users prefers the display name" do
+  test "list_users returns the real name and handle separately" do
     stub_response(fn conn ->
       Req.Test.json(conn, %{
         "data" => %{
           "users" => %{
             "nodes" => [
-              %{"id" => "user-1", "name" => "Priya Patel", "displayName" => "priya"},
-              %{"id" => "user-2", "name" => "Sam Jones", "displayName" => nil}
+              %{
+                "id" => "user-1",
+                "name" => "Priya Patel",
+                "displayName" => "priya",
+                "active" => true
+              }
             ]
           }
         }
@@ -110,7 +114,38 @@ defmodule ActionPoints.Sinks.LinearTest do
     end)
 
     assert Linear.list_users(@credentials) ==
-             {:ok, [%{id: "user-1", name: "priya"}, %{id: "user-2", name: "Sam Jones"}]}
+             {:ok, [%{id: "user-1", name: "Priya Patel", handle: "priya"}]}
+  end
+
+  test "list_users excludes deactivated members" do
+    stub_response(fn conn ->
+      {conn, payload} = decode_request(conn)
+      assert payload["query"] =~ "active"
+
+      Req.Test.json(conn, %{
+        "data" => %{
+          "users" => %{
+            "nodes" => [
+              %{
+                "id" => "user-1",
+                "name" => "Priya Patel",
+                "displayName" => "priya",
+                "active" => true
+              },
+              %{
+                "id" => "user-2",
+                "name" => "Sam Jones",
+                "displayName" => "sam",
+                "active" => false
+              }
+            ]
+          }
+        }
+      })
+    end)
+
+    assert Linear.list_users(@credentials) ==
+             {:ok, [%{id: "user-1", name: "Priya Patel", handle: "priya"}]}
   end
 
   test "push_task creates an issue in the team and returns its reference" do

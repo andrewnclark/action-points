@@ -34,7 +34,7 @@ defmodule ActionPoints.Sinks.FakeTaskSink do
 
   @impl true
   def list_users(_credentials) do
-    scripted(:users, {:ok, [%{id: "user-1", name: "Priya"}]})
+    scripted(:users, {:ok, [%{id: "user-1", name: "Priya", handle: "priya"}]})
   end
 
   @impl true
