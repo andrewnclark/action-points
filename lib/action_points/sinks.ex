@@ -1,7 +1,10 @@
 defmodule ActionPoints.Sinks do
   @moduledoc """
-  Task Sink connections: validating a pasted API key against the sink,
-  storing it encrypted alongside the chosen team, and disconnecting.
+  Task Sink connections and everything that depends on one: validating a
+  pasted API key and storing it encrypted alongside the chosen team,
+  disconnecting, Pushing a Review's Action Points, and — per ADR-0007 —
+  resolving their assignees against the connection's remembered Assignee
+  Mappings and live member list.
 
   The sink itself sits behind the `ActionPoints.Sinks.TaskSink` behaviour —
   Linear in production, a fake in tests — selected via the `:task_sink`
@@ -15,6 +18,7 @@ defmodule ActionPoints.Sinks do
   alias ActionPoints.Meetings
   alias ActionPoints.Meetings.Extraction
   alias ActionPoints.Repo
+  alias ActionPoints.Sinks.AssigneeMapping
   alias ActionPoints.Sinks.SinkConnection
 
   @doc """
@@ -102,48 +106,127 @@ defmodule ActionPoints.Sinks do
   end
 
   defp do_push(connection, extraction) do
-    credentials = %{api_key: connection.api_key}
-
     extraction.id
     |> Meetings.list_pushable_action_points()
-    |> push_each(connection, sink_users(credentials), [])
+    |> push_each(connection, [])
   end
 
-  # Assignee matching is best-effort: an unreachable user list degrades to
-  # unassigned tasks rather than failing the whole Push.
-  defp sink_users(credentials) do
-    case task_sink().list_users(credentials) do
-      {:ok, users} -> users
-      {:error, _reason} -> []
-    end
-  end
+  defp push_each([], _connection, pushed), do: {:ok, Enum.reverse(pushed)}
 
-  defp push_each([], _connection, _users, pushed), do: {:ok, Enum.reverse(pushed)}
-
-  defp push_each([action_point | rest], connection, users, pushed) do
+  defp push_each([action_point | rest], connection, pushed) do
+    # Push does no matching of its own (ADR-0007): whatever Review resolved
+    # onto the Action Point — or nothing — is exactly what Linear gets.
     task = %{
       title: action_point.title,
       description: action_point.description,
-      assignee_id: match_assignee(action_point.assignee_guess, users),
+      assignee_id: action_point.assignee_sink_user_id,
       due_date: action_point.due_date
     }
 
     case task_sink().push_task(%{api_key: connection.api_key}, connection.team_id, task) do
       {:ok, created_task} ->
         action_point = Meetings.record_push!(action_point, created_task)
-        push_each(rest, connection, users, [action_point | pushed])
+        remember_assignee_pick(connection, action_point)
+        push_each(rest, connection, [action_point | pushed])
 
       {:error, reason} ->
         {:error, {reason, Enum.reverse(pushed), length(rest) + 1}}
     end
   end
 
-  # A guess assigns only on an unambiguous match — exactly one sink user with
-  # that full name, or failing that exactly one whose first name is the guess.
-  # Anything else is left unassigned: a bad guess must never mis-assign.
-  defp match_assignee(nil, _users), do: nil
+  # The pick Review showed becomes the mapping, born the moment it is first
+  # Pushed — a suggestion the user never looked at is saved just the same as
+  # one they picked by hand (ADR-0007). Nothing is saved for a deliberately
+  # unassigned Action Point: that must never harden into "this name means
+  # nobody," and an unguessed Action Point has no name to key a mapping on.
+  defp remember_assignee_pick(_connection, %{assignee_guess: nil}), do: :ok
+  defp remember_assignee_pick(_connection, %{assignee_sink_user_id: nil}), do: :ok
 
-  defp match_assignee(guess, users) do
+  defp remember_assignee_pick(connection, action_point) do
+    key = AssigneeMapping.normalize(action_point.assignee_guess)
+
+    current =
+      Repo.get_by(AssigneeMapping, sink_connection_id: connection.id, normalized_guess: key)
+
+    unless current && current.sink_user_id == action_point.assignee_sink_user_id do
+      put_assignee_mapping(connection, action_point.assignee_guess, %{
+        id: action_point.assignee_sink_user_id,
+        name: action_point.assignee_display_name
+      })
+    end
+  end
+
+  ## Assignee resolution (ADR-0007)
+
+  @doc """
+  Resolves each of the given Action Points' assignee guesses against the
+  scoped user's Task Sink members and remembered Assignee Mappings: a mapping
+  hit resolves outright, an unambiguous match against a member's real name
+  (full name, then first name — never a handle) resolves as a visible
+  suggestion, anything else is left for the user to pick. Only Action Points
+  not already resolved are touched, so reopening Review never overwrites a
+  pick or an explicit clear.
+
+  Returns `{:ok, sink_users}` — the live, never-stored active members, for
+  building a picker — or `{:error, :not_connected | :unavailable}` when there
+  is nothing to resolve against. Review then shows the raw guesses as text:
+  nothing is ever guessed silently.
+  """
+  def resolve_assignees(scope, action_points) do
+    case get_connection_with_key(scope) do
+      nil ->
+        {:error, :not_connected}
+
+      connection ->
+        case task_sink().list_users(%{api_key: connection.api_key}) do
+          {:ok, users} ->
+            mappings = mappings_by_guess(connection.id)
+
+            action_points
+            |> Enum.filter(&is_nil(&1.assignee_resolution))
+            |> Enum.each(&resolve_one(&1, mappings, users))
+
+            {:ok, users}
+
+          {:error, _reason} ->
+            {:error, :unavailable}
+        end
+    end
+  end
+
+  defp mappings_by_guess(connection_id) do
+    AssigneeMapping
+    |> where([m], m.sink_connection_id == ^connection_id)
+    |> Repo.all()
+    |> Map.new(&{&1.normalized_guess, &1})
+  end
+
+  defp resolve_one(%{assignee_guess: nil} = action_point, _mappings, _users) do
+    Meetings.resolve_action_point_assignee(action_point, :unassigned, nil)
+  end
+
+  defp resolve_one(action_point, mappings, users) do
+    key = AssigneeMapping.normalize(action_point.assignee_guess)
+
+    case {Map.get(mappings, key), match_by_name(action_point.assignee_guess, users)} do
+      {%AssigneeMapping{} = mapping, _} ->
+        sink_user = %{id: mapping.sink_user_id, name: mapping.display_name}
+        Meetings.resolve_action_point_assignee(action_point, :mapped, sink_user)
+
+      {nil, %{} = sink_user} ->
+        Meetings.resolve_action_point_assignee(action_point, :suggested, sink_user)
+
+      {nil, nil} ->
+        Meetings.resolve_action_point_assignee(action_point, :unassigned, nil)
+    end
+  end
+
+  # An unambiguous match against real names only — never handles, so a
+  # guessed "Andrew" can never land on a handle like `@andrewclark12` (the
+  # bug this whole feature exists to fix). Exactly one full-name match wins;
+  # failing that, exactly one first-name match wins; anything else is left
+  # for the user to pick.
+  defp match_by_name(guess, users) do
     guess = guess |> String.trim() |> String.downcase()
 
     full_name_matches = Enum.filter(users, &(String.downcase(&1.name) == guess))
@@ -154,14 +237,110 @@ defmodule ActionPoints.Sinks do
       end)
 
     case {full_name_matches, first_name_matches} do
-      {[user], _} -> user.id
-      {[], [user]} -> user.id
+      {[user], _} -> user
+      {[], [user]} -> user
       _ -> nil
     end
   end
 
   @doc """
+  The scoped user's live, active Task Sink members — for the Assignee
+  Mapping picker in Sink Settings. Never stored (ADR-0007).
+  """
+  def list_sink_users(scope) do
+    case get_connection_with_key(scope) do
+      nil -> {:error, :not_connected}
+      connection -> task_sink().list_users(%{api_key: connection.api_key})
+    end
+  end
+
+  defp get_connection_with_key(nil), do: nil
+
+  defp get_connection_with_key(%Scope{user: %User{id: user_id}}) do
+    Repo.get_by(SinkConnection, user_id: user_id)
+  end
+
+  ## Assignee Mappings
+
+  @doc """
+  Lists the scoped user's Assignee Mappings, alphabetically by the guessed
+  name they fire on. Empty (not an error) when there is no connection.
+  """
+  def list_assignee_mappings(%Scope{} = scope) do
+    case get_connection(scope) do
+      nil ->
+        []
+
+      connection ->
+        Repo.all(
+          from m in AssigneeMapping,
+            where: m.sink_connection_id == ^connection.id,
+            order_by: [asc: m.normalized_guess]
+        )
+    end
+  end
+
+  @doc """
+  Fetches an Assignee Mapping only if it belongs to the scoped user's
+  connection. Raises `Ecto.NoResultsError` otherwise, so a user can never
+  reach another account's mapping.
+  """
+  def get_assignee_mapping!(%Scope{} = scope, id) do
+    connection = get_connection(scope) || raise(Ecto.NoResultsError, queryable: AssigneeMapping)
+    Repo.get_by!(AssigneeMapping, id: id, sink_connection_id: connection.id)
+  end
+
+  @doc """
+  Creates or replaces (by guessed name) an Assignee Mapping for the scoped
+  user's connection — how a mapping is pre-seeded ahead of Review, or how a
+  Push saves the pick it made (ADR-0007). `sink_user` is `%{id:, name:}`,
+  optionally `handle:`, from a live `list_sink_users/1` fetch.
+  """
+  def put_assignee_mapping(%SinkConnection{} = connection, guess, sink_user) do
+    %AssigneeMapping{sink_connection_id: connection.id}
+    |> AssigneeMapping.changeset(%{
+      normalized_guess: AssigneeMapping.normalize(guess),
+      sink_user_id: sink_user.id,
+      display_name: sink_user.name,
+      handle: Map.get(sink_user, :handle)
+    })
+    |> Repo.insert(
+      on_conflict: {:replace, [:sink_user_id, :display_name, :handle, :updated_at]},
+      conflict_target: [:sink_connection_id, :normalized_guess]
+    )
+  end
+
+  def put_assignee_mapping(%Scope{} = scope, guess, sink_user) do
+    connection = get_connection(scope) || raise(Ecto.NoResultsError, queryable: AssigneeMapping)
+    put_assignee_mapping(connection, guess, sink_user)
+  end
+
+  @doc """
+  Repoints an existing Assignee Mapping at a different Task Sink member. The
+  guessed name it fires on is unchanged.
+  """
+  def update_assignee_mapping(%AssigneeMapping{} = mapping, sink_user) do
+    mapping
+    |> AssigneeMapping.changeset(%{
+      sink_user_id: sink_user.id,
+      display_name: sink_user.name,
+      handle: Map.get(sink_user, :handle)
+    })
+    |> Repo.update()
+  end
+
+  @doc """
+  Deletes an Assignee Mapping — that guessed name goes back to resolving by
+  suggestion (or nothing) until it is mapped again.
+  """
+  def delete_assignee_mapping(%AssigneeMapping{} = mapping) do
+    Repo.delete(mapping)
+  end
+
+  @doc """
   Removes the scoped user's connection, revoking this app's use of the key.
+  Its Assignee Mappings cascade-delete with it (ADR-0007): a sink user id is
+  meaningless outside the workspace it named a member in.
   """
   def disconnect(%Scope{user: %User{id: user_id}}) do
     Repo.delete_all(from c in SinkConnection, where: c.user_id == ^user_id)

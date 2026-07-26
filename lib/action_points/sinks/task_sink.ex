@@ -12,7 +12,11 @@ defmodule ActionPoints.Sinks.TaskSink do
 
   @type credentials :: %{required(:api_key) => String.t()}
   @type team :: %{required(:id) => String.t(), required(:name) => String.t()}
-  @type sink_user :: %{required(:id) => String.t(), required(:name) => String.t()}
+  @type sink_user :: %{
+          required(:id) => String.t(),
+          required(:name) => String.t(),
+          required(:handle) => String.t()
+        }
 
   @type task :: %{
           required(:title) => String.t(),
@@ -31,6 +35,9 @@ defmodule ActionPoints.Sinks.TaskSink do
 
   @callback validate_credentials(credentials()) :: :ok | {:error, failure()}
   @callback list_teams(credentials()) :: {:ok, [team()]} | {:error, failure()}
+
+  # Deactivated members are filtered out by the adapter — the caller never
+  # sees someone who has left the workspace (ADR-0007).
   @callback list_users(credentials()) :: {:ok, [sink_user()]} | {:error, failure()}
   @callback push_task(credentials(), team_id :: String.t(), task()) ::
               {:ok, created_task()} | {:error, failure()}
