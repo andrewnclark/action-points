@@ -81,7 +81,11 @@ transcript-only as a permanent position.
 
 ## Brand Commitments
 
-- The name **ActionPoints** stays. The wordmark is text-only; there is no logo project.
+- The name **ActionPoints** stays. The wordmark is the name set in the brand face, preceded
+  by a small indigo glyph tile carrying a ▲. The tile came with the chosen Graphite direction
+  and the product owner kept it on 26 July 2026, overriding the earlier "text-only" line in
+  issue #13. It is a mark, not a logo project: it is drawn in CSS from the accent tokens, has
+  no standalone asset, and no further identity work follows from it.
 - Voice is a precise, confident tool voice: short declarative sentences, benefit-led but
   hype-free, product vocabulary used verbatim. Empty states and the post-Push success
   moment may carry a single degree of warmth; nothing else does.

@@ -17,42 +17,77 @@
   themes: false;
 }
 
-/* daisyUI theme plugin. You can update this file by fetching the latest version with:
-  curl -sLO https://github.com/saadeghi/daisyui/releases/latest/download/daisyui-theme.js
-  We ship with two themes, a light one inspired on Phoenix colors and a dark one inspired
-  on Elixir colors. Build your own at: https://daisyui.com/theme-generator/ */
+/* ── Typeface ────────────────────────────────────────────────────────────────
+   Inter, SIL Open Font License 1.1, latin subset, self-hosted from priv/static.
+   One variable file covers every weight the design uses; nothing loads from a
+   CDN. `fonts` is already in ActionPointsWeb.static_paths/0. The licence ships
+   beside the binary as the OFL requires — priv/static/fonts/Inter-OFL.txt. */
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/Inter-var.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* ── Graphite: the ActionPoints design tokens ────────────────────────────────
+   The direction chosen in #14 — cold neutral surfaces, tight radii, hairline
+   borders, and one electric indigo that nothing else on the screen competes
+   with. Dark is the canonical theme; light is derived from it by inverting the
+   surface ramp and deepening the accent enough to hold white text.
+
+   Every screen reads these tokens and only these tokens, so the ramp below is
+   the whole palette:
+
+     base-100      the page
+     base-200      cards and raised surfaces
+     base-300      borders, dividers, hover fills
+     base-content  text — /70 for secondary, /55 for faint metadata
+     primary       solid actions (Push, Save, the primary call to action)
+     accent        accented text, links, focus rings, the editing state
+
+   daisyUI stays as the plumbing; none of its stock look survives. */
 @plugin "../vendor/daisyui-theme" {
   name: "dark";
   default: false;
   prefersdark: true;
   color-scheme: "dark";
-  --color-base-100: oklch(30.33% 0.016 252.42);
-  --color-base-200: oklch(25.26% 0.014 253.1);
-  --color-base-300: oklch(20.15% 0.012 254.09);
-  --color-base-content: oklch(97.807% 0.029 256.847);
-  --color-primary: oklch(58% 0.233 277.117);
-  --color-primary-content: oklch(96% 0.018 272.314);
-  --color-secondary: oklch(58% 0.233 277.117);
-  --color-secondary-content: oklch(96% 0.018 272.314);
-  --color-accent: oklch(60% 0.25 292.717);
-  --color-accent-content: oklch(96% 0.016 293.756);
-  --color-neutral: oklch(37% 0.044 257.287);
-  --color-neutral-content: oklch(98% 0.003 247.858);
-  --color-info: oklch(58% 0.158 241.966);
-  --color-info-content: oklch(97% 0.013 236.62);
-  --color-success: oklch(60% 0.118 184.704);
-  --color-success-content: oklch(98% 0.014 180.72);
-  --color-warning: oklch(66% 0.179 58.318);
-  --color-warning-content: oklch(98% 0.022 95.277);
-  --color-error: oklch(58% 0.253 17.585);
-  --color-error-content: oklch(96% 0.015 12.422);
-  --radius-selector: 0.25rem;
-  --radius-field: 0.25rem;
-  --radius-box: 0.5rem;
-  --size-selector: 0.21875rem;
-  --size-field: 0.21875rem;
-  --border: 1.5px;
-  --depth: 1;
+  --color-base-100: #0b0d10;
+  --color-base-200: #14171c;
+  --color-base-300: #262b33;
+  --color-base-content: #e6e8eb;
+  /* One step deeper than the mockup's #6e7bff so white label text clears 4.5:1
+     — the mockup's own indigo survives as `accent`, where it sits on the page
+     background rather than under text. */
+  --color-primary: #5865f2;
+  --color-primary-content: #ffffff;
+  --color-secondary: #262b33;
+  --color-secondary-content: #e6e8eb;
+  --color-accent: #8b95ff;
+  --color-accent-content: #0b0d10;
+  --color-neutral: #1a1e24;
+  --color-neutral-content: #e6e8eb;
+  --color-info: #8b95ff;
+  --color-info-content: #0b0d10;
+  --color-success: #3ecf8e;
+  --color-success-content: #04211a;
+  --color-warning: #e0a24a;
+  --color-warning-content: #22160a;
+  --color-error: #f2555a;
+  --color-error-content: #2a080a;
+  /* One radius everywhere: Graphite is tight and consistent, not rounded. */
+  --radius-selector: 0.375rem;
+  --radius-field: 0.375rem;
+  --radius-box: 0.375rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  /* Hairline borders, no bevel — the surfaces separate by value, not by depth. */
+  --border: 1px;
+  --depth: 0;
   --noise: 0;
 }
 
@@ -61,33 +96,37 @@
   default: true;
   prefersdark: false;
   color-scheme: "light";
-  --color-base-100: oklch(98% 0 0);
-  --color-base-200: oklch(96% 0.001 286.375);
-  --color-base-300: oklch(92% 0.004 286.32);
-  --color-base-content: oklch(21% 0.006 285.885);
-  --color-primary: oklch(70% 0.213 47.604);
-  --color-primary-content: oklch(98% 0.016 73.684);
-  --color-secondary: oklch(55% 0.027 264.364);
-  --color-secondary-content: oklch(98% 0.002 247.839);
-  --color-accent: oklch(0% 0 0);
-  --color-accent-content: oklch(100% 0 0);
-  --color-neutral: oklch(44% 0.017 285.786);
-  --color-neutral-content: oklch(98% 0 0);
-  --color-info: oklch(62% 0.214 259.815);
-  --color-info-content: oklch(97% 0.014 254.604);
-  --color-success: oklch(70% 0.14 182.503);
-  --color-success-content: oklch(98% 0.014 180.72);
-  --color-warning: oklch(66% 0.179 58.318);
-  --color-warning-content: oklch(98% 0.022 95.277);
-  --color-error: oklch(58% 0.253 17.585);
-  --color-error-content: oklch(96% 0.015 12.422);
-  --radius-selector: 0.25rem;
-  --radius-field: 0.25rem;
-  --radius-box: 0.5rem;
-  --size-selector: 0.21875rem;
-  --size-field: 0.21875rem;
-  --border: 1.5px;
-  --depth: 1;
+  --color-base-100: #ffffff;
+  --color-base-200: #f6f7f9;
+  --color-base-300: #dde1e7;
+  --color-base-content: #14171c;
+  --color-primary: #4a56d2;
+  --color-primary-content: #ffffff;
+  --color-secondary: #dde1e7;
+  --color-secondary-content: #14171c;
+  /* Dark brightens toward its accent on hover; on white the same move has to go
+     the other way, so light's accent is a step deeper than its primary. */
+  --color-accent: #3f4ac0;
+  --color-accent-content: #ffffff;
+  --color-neutral: #14171c;
+  --color-neutral-content: #f6f7f9;
+  --color-info: #4a56d2;
+  --color-info-content: #ffffff;
+  /* Deep enough that the pushed-issue badge clears 4.5:1 on a card, which the
+     dark theme's brighter green manages on its own. */
+  --color-success: #0b7a4f;
+  --color-success-content: #ffffff;
+  --color-warning: #9a6212;
+  --color-warning-content: #ffffff;
+  --color-error: #cf2f36;
+  --color-error-content: #ffffff;
+  --radius-selector: 0.375rem;
+  --radius-field: 0.375rem;
+  --radius-box: 0.375rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
   --noise: 0;
 }
 
@@ -102,4 +141,42 @@
 /* Make LiveView wrapper divs transparent for layout */
 [data-phx-session], [data-phx-teleported-src] { display: contents }
 
-/* This file is for your main application CSS */
+/* ── Base ────────────────────────────────────────────────────────────────────
+   Graphite is dense: 14px body text with slightly negative tracking. The root
+   stays at 16px so Tailwind's rem-based spacing scale is unaffected. */
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    font-size: 0.875rem;
+    line-height: 1.55;
+    letter-spacing: -0.006em;
+    background-color: var(--color-base-100);
+    color: var(--color-base-content);
+  }
+
+  /* Headings are tighter still — the type does the work Graphite doesn't ask
+     colour to do. */
+  h1, h2, h3 {
+    letter-spacing: -0.022em;
+  }
+
+  /* An accessibility floor, not an audit: every interactive control shows the
+     same focus ring, and it is the accent so it is never mistaken for chrome. */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* daisyUI darkens a button on hover, which on a dark canvas reads as pressed
+     rather than live. Graphite brightens toward the accent instead. */
+  .btn-primary:hover {
+    background-color: var(--color-accent);
+    color: var(--color-accent-content);
+  }
+}

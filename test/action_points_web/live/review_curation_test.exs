@@ -29,8 +29,8 @@ defmodule ActionPointsWeb.ReviewCurationTest do
   # Creates a succeeded Extraction owned by the conn's anonymous session and
   # opens its Review screen. The Extraction runs synchronously here so the
   # curation tests start from a settled Review, not a spinner.
-  defp open_review(conn) do
-    Application.put_env(:action_points, :fake_extractor_result, @extractor_result)
+  defp open_review(conn, result \\ @extractor_result) do
+    Application.put_env(:action_points, :fake_extractor_result, result)
     on_exit(fn -> Application.delete_env(:action_points, :fake_extractor_result) end)
 
     conn = get(conn, ~p"/")
@@ -70,6 +70,32 @@ defmodule ActionPointsWeb.ReviewCurationTest do
            )
 
     assert has_element?(review, "#push-button", "Push 2")
+  end
+
+  test "the toolbar tallies the curation and promises nothing is created yet", %{conn: conn} do
+    %{review: review, action_points: [first, _second]} = open_review(conn)
+
+    assert has_element?(review, "h1", "Review your Action Points")
+    assert has_element?(review, "#review-toolbar", "2 accepted")
+
+    assert has_element?(
+             review,
+             "#review-toolbar",
+             "Nothing is created in Linear until you Push"
+           )
+
+    review |> element("##{dom_id(first)}-reject") |> render_click()
+
+    assert has_element?(review, "#review-toolbar", "1 accepted")
+    assert has_element?(review, "#review-toolbar", "1 rejected")
+  end
+
+  test "an Extraction that finds nothing lands on a designed empty Review", %{conn: conn} do
+    %{review: review} = open_review(conn, {:ok, []})
+
+    assert has_element?(review, "#review-empty", "No Action Points")
+    assert has_element?(review, "#review-empty a", "Extract another Transcript")
+    refute has_element?(review, "#push-button")
   end
 
   test "an Action Point can be rejected and un-rejected", %{conn: conn} do
@@ -123,7 +149,7 @@ defmodule ActionPointsWeb.ReviewCurationTest do
     |> render_submit()
 
     assert has_element?(review, "#action-points li [data-role=assignee]", "Sam")
-    assert has_element?(review, "#action-points li [data-role=due-date]", "2026-08-14")
+    assert has_element?(review, "#action-points li [data-role=due-date]", "14 Aug 2026")
   end
 
   test "assignee guess and due date can be cleared", %{conn: conn} do

@@ -44,6 +44,15 @@ _Avoid_: token, usage
 A one-off purchase of a fixed number of Credits. The only way to buy; there are no subscriptions.
 _Avoid_: plan, subscription, tier
 
+Wherever a Pack is being sold, its size may be given in _meetings_ — "a Pack of 15 meetings" —
+because a visitor who has not yet met the product cannot price a Credit. That is the only
+sanctioned use of _meeting_ as a unit, and it is scoped to the size of a Pack: the unit of
+entitlement is always the Credit, so a balance, a gate, and Review all count in Credits even
+when the same sentence goes on to size a Pack in meetings ("You're out of Credits — a Pack
+covers your next 15 meetings"). Settled 26 July 2026 in the facelift copy pass; the
+alternative, sizing a Pack in Credits everywhere, was rejected as too abstract at the point
+of sale.
+
 **Free Meeting**:
 The single Credit granted to every new account so the first Extraction costs nothing.
 _Avoid_: trial, free tier

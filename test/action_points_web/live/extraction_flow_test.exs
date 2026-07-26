@@ -46,7 +46,7 @@ defmodule ActionPointsWeb.ExtractionFlowTest do
     eventually(fn ->
       assert has_element?(review, "#action-points li", "Send the Q3 report to finance")
       assert has_element?(review, "#action-points li", "Priya committed to sending the Q3 report")
-      assert has_element?(review, "#action-points li", "2026-07-31")
+      assert has_element?(review, "#action-points li", "31 Jul 2026")
       assert has_element?(review, "#action-points li", "Book the offsite venue")
       assert has_element?(review, "#action-points li", "Tom")
     end)
