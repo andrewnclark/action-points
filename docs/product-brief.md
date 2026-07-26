@@ -26,12 +26,15 @@ Paste a meeting transcript → Claude extracts Action Points → user curates th
 
 ## Build order
 
-1. Scaffold + auth + skeleton deployed to Fly early (deploy pain while fresh)
+All development is local — Docker Compose for Postgres, app via `mix phx.server`, nothing running remotely until the final step (ADR-0006).
+
+1. Scaffold + auth + local walking skeleton (Phoenix + dockerised Postgres, `mix test` green)
 2. Extraction pipeline + Review screen (the core, biggest chunk)
 3. Linear push behind the `TaskSink` behaviour
-4. Credits ledger + Stripe test-mode checkout + webhook
+4. Credits ledger + Stripe test-mode checkout + webhook (webhook exercised locally via Stripe CLI)
 5. Landing page copy (Review demo embedded, no signup)
-6. Polish / buffer; flip Stripe live key if verification arrived
+6. Polish / buffer
+7. Deploy to Fly — the one and only deploy, once we're happy locally; flip Stripe live key if verification arrived
 
 ## Deferred (with revisit triggers)
 
