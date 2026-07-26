@@ -1,33 +1,36 @@
-# Fly.io config — the one deploy (ADR-0006, issue #12).
-# Minimum hardware on purpose: a friends-feedback MVP, not a launch posture.
-app = "actionpoints"
-primary_region = "lhr"
+# fly.toml app configuration file generated for actionpoints on 2026-07-26T21:03:24Z
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
 
-# Headroom for the BEAM on a 256MB machine — release boots + migrations spike.
-# Top-level on purpose: after a [[vm]] header this key would silently belong
-# to the vm table, where flyctl ignores it.
+app = 'actionpoints'
+primary_region = 'lhr'
+kill_signal = 'SIGTERM'
 swap_size_mb = 512
 
 [build]
 
 [deploy]
-  release_command = "/app/bin/migrate"
+  release_command = '/app/bin/migrate'
 
 [env]
-  PHX_HOST = "actionpoints.fly.dev"
-  PORT = "8080"
-  # Fly private networking (Postgres attach) is IPv6-only.
-  ECTO_IPV6 = "true"
-  # Half the default: one shared CPU and a dev-size Postgres don't need 10.
-  POOL_SIZE = "5"
+  ECTO_IPV6 = 'true'
+  PHX_HOST = 'actionpoints.fly.dev'
+  POOL_SIZE = '5'
+  PORT = '8080'
 
 [http_service]
   internal_port = 8080
   force_https = true
-  auto_stop_machines = "stop"
+  auto_stop_machines = 'stop'
   auto_start_machines = true
   min_machines_running = 0
 
+  [http_service.concurrency]
+    type = 'connections'
+    hard_limit = 1000
+    soft_limit = 1000
+
 [[vm]]
-  size = "shared-cpu-1x"
-  memory = "256mb"
+  size = 'shared-cpu-1x'
+  memory = '256mb'
