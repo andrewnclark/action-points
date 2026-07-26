@@ -121,11 +121,23 @@ defmodule ActionPointsWeb.ReviewLive do
             >
               <.icon name="hero-exclamation-triangle" class="size-5 shrink-0 text-error" />
               <div>
+                <%!-- A Push that never created anything did not stop partway,
+                and saying it did sends the reader to Linear looking for a task
+                that was never made. Only a split is reported as a split. --%>
                 <p class="font-semibold">
-                  The Push stopped partway: {@push_failure.created} created, {@push_failure.remaining} not created.
+                  <%= if @push_failure.created == 0 do %>
+                    The Push didn't go through: nothing was created.
+                  <% else %>
+                    The Push stopped partway: {@push_failure.created} created, {@push_failure.remaining} not created.
+                  <% end %>
                 </p>
                 <p class="mt-1 text-base-content/70">
-                  {push_failure_reason(@push_failure.reason)} Pushing again creates only the missing ones — never a duplicate.
+                  {push_failure_reason(@push_failure.reason)}
+                  <%= if @push_failure.created == 0 do %>
+                    Pushing again starts from scratch — nothing is there to duplicate.
+                  <% else %>
+                    Pushing again creates only the missing ones — never a duplicate.
+                  <% end %>
                 </p>
               </div>
             </div>
