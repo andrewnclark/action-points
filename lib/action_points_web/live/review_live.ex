@@ -7,6 +7,7 @@ defmodule ActionPointsWeb.ReviewLive do
   use ActionPointsWeb, :live_view
 
   alias ActionPoints.Meetings
+  alias ActionPoints.Sinks
 
   @impl true
   def render(assigns) do
@@ -46,14 +47,65 @@ defmodule ActionPointsWeb.ReviewLive do
                 </p>
               </div>
               <button
+                :if={@pushable_count > 0 or @pushed_action_points == []}
                 id="push-button"
                 class="btn btn-primary"
-                disabled
-                title="Push is coming soon"
+                phx-click="push"
+                disabled={@pushing? or @pushable_count == 0}
               >
-                <.icon name="hero-paper-airplane" class="size-4" />
-                {ngettext("Push 1 Action Point", "Push %{count} Action Points", @accepted_count)}
+                <%= if @pushing? do %>
+                  <span class="loading loading-spinner loading-xs" aria-hidden="true"></span> Pushing…
+                <% else %>
+                  <.icon name="hero-paper-airplane" class="size-4" />
+                  {ngettext("Push 1 Action Point", "Push %{count} Action Points", @pushable_count)}
+                <% end %>
               </button>
+            </div>
+
+            <div
+              :if={@push_failure}
+              id="push-failure"
+              class="alert alert-error mb-4"
+              role="alert"
+            >
+              <.icon name="hero-exclamation-triangle" class="size-5" />
+              <div>
+                <p class="font-semibold">
+                  The Push stopped partway: {@push_failure.created} created, {@push_failure.remaining} not created.
+                </p>
+                <p class="text-sm">
+                  {push_failure_reason(@push_failure.reason)} Pushing again creates only the missing ones — never a duplicate.
+                </p>
+              </div>
+            </div>
+
+            <div
+              :if={@pushed_action_points != [] and @pushable_count == 0 and not @pushing?}
+              id="push-confirmation"
+              class="alert alert-success mb-4 items-start"
+            >
+              <.icon name="hero-check-circle" class="size-5" />
+              <div>
+                <p class="font-semibold">
+                  {ngettext(
+                    "1 issue created.",
+                    "%{count} issues created.",
+                    length(@pushed_action_points)
+                  )}
+                </p>
+                <ul class="mt-1 space-y-0.5 text-sm">
+                  <li :for={action_point <- @pushed_action_points}>
+                    <a
+                      href={action_point.sink_issue_url}
+                      target="_blank"
+                      rel="noopener"
+                      class="link"
+                    >
+                      {action_point.sink_issue_identifier} — {action_point.title}
+                    </a>
+                  </li>
+                </ul>
+              </div>
             </div>
 
             <ul id="action-points" phx-update="stream" class="space-y-4">
@@ -110,35 +162,48 @@ defmodule ActionPointsWeb.ReviewLive do
                       {action_point.title}
                     </h2>
                     <div class="flex shrink-0 gap-1">
-                      <%= if action_point.status == :accepted do %>
-                        <button
-                          id={"#{dom_id}-edit"}
-                          phx-click="edit"
-                          phx-value-id={action_point.id}
-                          class="btn btn-ghost btn-xs"
-                          title="Edit this Action Point"
-                        >
-                          <.icon name="hero-pencil-square-micro" class="size-3.5" /> Edit
-                        </button>
-                        <button
-                          id={"#{dom_id}-reject"}
-                          phx-click="reject"
-                          phx-value-id={action_point.id}
-                          class="btn btn-ghost btn-xs"
-                          title="Reject this Action Point"
-                        >
-                          <.icon name="hero-x-mark-micro" class="size-3.5" /> Reject
-                        </button>
-                      <% else %>
-                        <button
-                          id={"#{dom_id}-accept"}
-                          phx-click="accept"
-                          phx-value-id={action_point.id}
-                          class="btn btn-outline btn-xs"
-                          title="Accept this Action Point again"
-                        >
-                          <.icon name="hero-arrow-uturn-left-micro" class="size-3.5" /> Accept
-                        </button>
+                      <%= cond do %>
+                        <% action_point.sink_issue_id -> %>
+                          <a
+                            data-role="sink-issue"
+                            href={action_point.sink_issue_url}
+                            target="_blank"
+                            rel="noopener"
+                            class="badge badge-success gap-1"
+                            title="Created in your Task Sink"
+                          >
+                            <.icon name="hero-check-micro" class="size-3" />
+                            {action_point.sink_issue_identifier}
+                          </a>
+                        <% action_point.status == :accepted -> %>
+                          <button
+                            id={"#{dom_id}-edit"}
+                            phx-click="edit"
+                            phx-value-id={action_point.id}
+                            class="btn btn-ghost btn-xs"
+                            title="Edit this Action Point"
+                          >
+                            <.icon name="hero-pencil-square-micro" class="size-3.5" /> Edit
+                          </button>
+                          <button
+                            id={"#{dom_id}-reject"}
+                            phx-click="reject"
+                            phx-value-id={action_point.id}
+                            class="btn btn-ghost btn-xs"
+                            title="Reject this Action Point"
+                          >
+                            <.icon name="hero-x-mark-micro" class="size-3.5" /> Reject
+                          </button>
+                        <% true -> %>
+                          <button
+                            id={"#{dom_id}-accept"}
+                            phx-click="accept"
+                            phx-value-id={action_point.id}
+                            class="btn btn-outline btn-xs"
+                            title="Accept this Action Point again"
+                          >
+                            <.icon name="hero-arrow-uturn-left-micro" class="size-3.5" /> Accept
+                          </button>
                       <% end %>
                     </div>
                   </div>
@@ -232,16 +297,96 @@ defmodule ActionPointsWeb.ReviewLive do
     end
   end
 
+  def handle_event("push", _params, socket) do
+    scope = socket.assigns.current_scope
+
+    cond do
+      # The button disables while pushing, but a queued double-click still
+      # lands here — it must not start a second Push.
+      socket.assigns.pushing? ->
+        {:noreply, socket}
+
+      is_nil(scope) ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Create a free account to Push — your Review is saved.")
+         |> push_navigate(to: ~p"/users/register")}
+
+      is_nil(Sinks.get_connection(scope)) ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Connect Linear to Push your Action Points.")
+         |> push_navigate(to: ~p"/settings/sink")}
+
+      true ->
+        extraction = socket.assigns.extraction
+
+        {:noreply,
+         socket
+         |> assign(:pushing?, true)
+         |> assign(:push_failure, nil)
+         |> start_async(:push, fn -> Sinks.push(scope, extraction) end)}
+    end
+  end
+
   def handle_event("retry", _params, socket) do
-    %{id: id, session_token: session_token} = socket.assigns.extraction
     Meetings.retry_extraction(socket.assigns.extraction)
-    {:noreply, assign_extraction(socket, Meetings.get_extraction!(id, session_token))}
+    {:noreply, assign_extraction(socket, refetch_extraction(socket))}
+  end
+
+  @impl true
+  def handle_async(:push, {:ok, result}, socket) do
+    socket = assign_extraction(socket, refetch_extraction(socket))
+
+    case result do
+      {:ok, pushed} ->
+        {:noreply,
+         put_flash(
+           socket,
+           :info,
+           ngettext(
+             "Pushed 1 Action Point to Linear.",
+             "Pushed %{count} Action Points to Linear.",
+             length(pushed)
+           )
+         )}
+
+      {:error, :not_connected} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Connect Linear to Push your Action Points.")
+         |> push_navigate(to: ~p"/settings/sink")}
+
+      {:error, :push_in_progress} ->
+        {:noreply,
+         put_flash(socket, :error, "A Push of this Review is already running — give it a moment.")}
+
+      {:error, {reason, pushed, remaining}} ->
+        {:noreply,
+         assign(socket, :push_failure, %{
+           reason: reason,
+           created: length(pushed),
+           remaining: remaining
+         })}
+    end
+  end
+
+  def handle_async(:push, {:exit, _reason}, socket) do
+    # Even a crashed Push recorded each issue it created before dying, so a
+    # fresh fetch shows the true split and pushing again stays duplicate-free.
+    socket = assign_extraction(socket, refetch_extraction(socket))
+
+    {:noreply,
+     assign(socket, :push_failure, %{
+       reason: :api_error,
+       created: length(socket.assigns.pushed_action_points),
+       remaining: socket.assigns.pushable_count
+     })}
   end
 
   @impl true
   def handle_info({:extraction_updated, _id}, socket) do
-    %{id: id, session_token: session_token} = socket.assigns.extraction
-    {:noreply, assign_extraction(socket, Meetings.get_extraction!(id, session_token))}
+    {:noreply, assign_extraction(socket, refetch_extraction(socket))}
   end
 
   defp close_editor(socket) do
@@ -270,17 +415,36 @@ defmodule ActionPointsWeb.ReviewLive do
   # transient UI state on the other cards.
   defp refresh_action_point(socket, action_point) do
     socket
-    |> assign(:accepted_count, Meetings.count_accepted_action_points(action_point.extraction_id))
+    |> assign(:pushable_count, Meetings.count_pushable_action_points(action_point.extraction_id))
     |> stream_insert(:action_points, action_point)
   end
 
   defp assign_extraction(socket, extraction) do
+    action_points = extraction.action_points
+
     socket
     |> assign(:extraction, %{extraction | action_points: []})
     |> assign(:editing, nil)
     |> assign(:edit_form, nil)
-    |> assign(:action_point_count, length(extraction.action_points))
-    |> assign(:accepted_count, Meetings.count_accepted_action_points(extraction.id))
-    |> stream(:action_points, extraction.action_points, reset: true)
+    |> assign(:action_point_count, length(action_points))
+    |> assign(:pushable_count, Enum.count(action_points, &Meetings.ActionPoint.pushable?/1))
+    |> assign(:pushed_action_points, Enum.filter(action_points, & &1.sink_issue_id))
+    |> assign(:pushing?, false)
+    |> assign(:push_failure, nil)
+    |> stream(:action_points, action_points, reset: true)
   end
+
+  defp refetch_extraction(socket) do
+    %{id: id, session_token: session_token} = socket.assigns.extraction
+    Meetings.get_extraction!(id, session_token)
+  end
+
+  defp push_failure_reason(:invalid_key),
+    do: "Linear rejected the connected API key — check it in settings."
+
+  defp push_failure_reason(:rate_limited),
+    do: "Linear rate-limited the Push — give it a minute."
+
+  defp push_failure_reason(_reason),
+    do: "Linear could not be reached."
 end

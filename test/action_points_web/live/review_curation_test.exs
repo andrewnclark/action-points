@@ -69,7 +69,7 @@ defmodule ActionPointsWeb.ReviewCurationTest do
              "Book the offsite venue"
            )
 
-    assert has_element?(review, "#push-button:disabled", "Push 2")
+    assert has_element?(review, "#push-button", "Push 2")
   end
 
   test "an Action Point can be rejected and un-rejected", %{conn: conn} do
@@ -187,6 +187,6 @@ defmodule ActionPointsWeb.ReviewCurationTest do
              "Book the offsite venue"
            )
 
-    assert has_element?(reloaded, "#push-button:disabled", "Push 1")
+    assert has_element?(reloaded, "#push-button", "Push 1")
   end
 end

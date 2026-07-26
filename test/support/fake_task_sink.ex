@@ -7,9 +7,16 @@ defmodule ActionPoints.Sinks.FakeTaskSink do
         teams: {:ok, [%{id: "team-1", name: "Engineering"}]}
       )
 
-  Unscripted callbacks return canned successes. Pushed tasks accumulate under
-  the `:pushes` key of the `:fake_task_sink_pushes` env so tests can assert
-  what the sink was asked to create.
+  Unscripted callbacks return canned successes. A scripted *list* is consumed
+  one element per call (then back to the default), which is how tests stage a
+  mid-Push failure:
+
+      Application.put_env(:action_points, :fake_task_sink,
+        push: [:ok, {:error, :unavailable}]
+      )
+
+  Pushed tasks accumulate in the `:fake_task_sink_pushes` env so tests can
+  assert what the sink was asked to create.
   """
 
   @behaviour ActionPoints.Sinks.TaskSink
@@ -32,6 +39,8 @@ defmodule ActionPoints.Sinks.FakeTaskSink do
 
   @impl true
   def push_task(_credentials, team_id, task) do
+    await_push_gate()
+
     case scripted(:push, :ok) do
       :ok ->
         pushes = Application.get_env(:action_points, :fake_task_sink_pushes, [])
@@ -50,9 +59,36 @@ defmodule ActionPoints.Sinks.FakeTaskSink do
     end
   end
 
+  # With `push_gate: test_pid` scripted, every push_task call announces itself
+  # to the test and blocks until told to proceed — how concurrency tests hold
+  # a Push deterministically mid-flight.
+  defp await_push_gate do
+    case Application.get_env(:action_points, :fake_task_sink, [])[:push_gate] do
+      nil ->
+        :ok
+
+      gate_pid ->
+        send(gate_pid, {:push_task_called, self()})
+
+        receive do
+          :proceed -> :ok
+        end
+    end
+  end
+
   defp scripted(key, default) do
-    :action_points
-    |> Application.get_env(:fake_task_sink, [])
-    |> Keyword.get(key, default)
+    script = Application.get_env(:action_points, :fake_task_sink, [])
+
+    case Keyword.get(script, key, default) do
+      [] ->
+        default
+
+      [next | rest] ->
+        Application.put_env(:action_points, :fake_task_sink, Keyword.put(script, key, rest))
+        next
+
+      value ->
+        value
+    end
   end
 end
