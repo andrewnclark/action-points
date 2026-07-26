@@ -168,6 +168,23 @@ defmodule ActionPointsWeb.PushTest do
       assert [_first, _second] = Application.get_env(:action_points, :fake_task_sink_pushes, [])
     end
 
+    test "a Push that creates nothing says so instead of reporting a split", %{conn: conn} do
+      Application.put_env(:action_points, :fake_task_sink,
+        push: [{:error, :unavailable}, {:error, :unavailable}]
+      )
+
+      %{review: review} = open_review(conn)
+
+      push(review)
+
+      # "Stopped partway" is a claim about a Push that got somewhere. This one
+      # never created a task, and saying otherwise makes the reader hunt Linear
+      # for a task that isn't there.
+      assert has_element?(review, "#push-failure", "nothing was created")
+      refute has_element?(review, "#push-failure", "stopped partway")
+      assert has_element?(review, "#push-button", "Push 2")
+    end
+
     test "reloading after a Push keeps the confirmation and issue links", %{conn: conn} do
       %{review: review, conn: conn, path: path} = open_review(conn)
 
