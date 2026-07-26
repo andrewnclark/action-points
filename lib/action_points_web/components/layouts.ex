@@ -106,20 +106,21 @@ defmodule ActionPointsWeb.Layouts do
   end
 
   @doc """
-  The chrome the four auth screens share: a narrow column, a lead that says
-  which moment this is, the form on one panel, and a quiet footer link out.
+  The chrome the single-column screens share: a narrow column, a lead that says
+  which moment this is, the panel, and a quiet footer link out.
 
   The screens differ by state — registering with a Demo Review in hand is a
-  different moment from re-authenticating — so the lead is a slot and every
+  different moment from re-authenticating, and connecting a Task Sink is a
+  different moment from replacing its key — so the lead is a slot and every
   screen writes its own. What they must not differ in is the shape.
 
   ## Examples
 
-      <Layouts.auth_page eyebrow="Account" title="Log in.">
+      <Layouts.form_page eyebrow="Account" title="Log in.">
         <:lead>We email you a link — no password to remember.</:lead>
         <.form for={@form} id="login_form_magic">…</.form>
         <:footer>No account yet? <.link navigate={~p"/users/register"}>Create one</.link></:footer>
-      </Layouts.auth_page>
+      </Layouts.form_page>
   """
   attr :eyebrow, :string, required: true
   attr :title, :string, required: true
@@ -127,7 +128,7 @@ defmodule ActionPointsWeb.Layouts do
   slot :inner_block, required: true
   slot :footer
 
-  def auth_page(assigns) do
+  def form_page(assigns) do
     ~H"""
     <div class="mx-auto max-w-md pt-10">
       <.page_lead eyebrow={@eyebrow} title={@title}>

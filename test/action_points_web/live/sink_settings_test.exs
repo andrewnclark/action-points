@@ -46,6 +46,14 @@ defmodule ActionPointsWeb.SinkSettingsTest do
     refute has_element?(view, "#sink-connection")
   end
 
+  test "the key form names the Task Sink and what a Push does", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/settings/sink")
+
+    assert has_element?(view, "main header", "Task Sink")
+    assert has_element?(view, "h1", "Connect Linear")
+    assert has_element?(view, "main header p", "Action Points you Push become issues")
+  end
+
   test "an invalid key shows the reason and stores nothing", %{conn: conn} do
     script_sink(validate: {:error, :invalid_key})
 
@@ -64,6 +72,18 @@ defmodule ActionPointsWeb.SinkSettingsTest do
     assert submit_key(view, @api_key) =~ "Linear could not be reached"
   end
 
+  test "a key with no teams behind it is refused and stores nothing", %{conn: conn} do
+    script_sink(teams: {:ok, []})
+
+    {:ok, view, _html} = live(conn, ~p"/settings/sink")
+
+    submit_key(view, @api_key)
+
+    assert has_element?(view, "#sink-key-error", "no teams to Push into")
+    refute has_element?(view, "#sink-team-form")
+    assert Repo.aggregate("sink_connections", :count) == 0
+  end
+
   test "a valid key moves to a team picker listing the user's Linear teams", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/settings/sink")
 
@@ -72,6 +92,15 @@ defmodule ActionPointsWeb.SinkSettingsTest do
     assert has_element?(view, "#sink-team-form")
     assert has_element?(view, "#sink-team-form option", "Engineering")
     assert has_element?(view, "#sink-team-form option", "Design")
+  end
+
+  test "the team picker says the pick decides where Pushes land", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/settings/sink")
+
+    submit_key(view, @api_key)
+
+    assert has_element?(view, "h1", "Choose a team")
+    assert has_element?(view, "main header p", "Pushed Action Points land in the team you pick")
   end
 
   test "choosing a team saves the connection and shows it masked", %{conn: conn} do
@@ -84,6 +113,29 @@ defmodule ActionPointsWeb.SinkSettingsTest do
     # Masked: the last four characters appear, the full key never does
     assert has_element?(view, "#sink-masked-key", "abcd")
     refute html =~ @api_key
+  end
+
+  test "the connected screen says the Task Sink is live and names it", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/settings/sink")
+
+    connect(view)
+
+    assert has_element?(view, "h1", "Linear is connected")
+    assert has_element?(view, "#sink-connection", "Connected")
+    assert has_element?(view, "#sink-connection", "Linear")
+    # Disconnecting is reversible for the Task Sink but not for what it already
+    # created, and the screen says so before the button is reached for.
+    assert has_element?(view, "#sink-connection", "Issues already created in Linear stay")
+  end
+
+  test "replacing a key says the current connection keeps working meanwhile", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/settings/sink")
+    connect(view)
+
+    view |> element("#replace-key") |> render_click()
+
+    assert has_element?(view, "h1", "Replace your key")
+    assert has_element?(view, "main header p", "keeps working until it does")
   end
 
   test "the key is encrypted at rest", %{conn: conn, user: user} do
@@ -143,11 +195,13 @@ defmodule ActionPointsWeb.SinkSettingsTest do
     {:ok, view, _html} = live(conn, ~p"/settings/sink")
     connect(view)
 
-    view |> element("#disconnect-sink") |> render_click()
+    html = view |> element("#disconnect-sink") |> render_click()
 
     assert has_element?(view, "#sink-key-form")
     refute has_element?(view, "#sink-connection")
     assert Repo.aggregate("sink_connections", :count) == 0
+    # Disconnecting is a Push-affecting act, and the confirmation says which.
+    assert html =~ "You can&#39;t Push until you reconnect"
   end
 
   test "a returning connected user sees their connection, not the key form", %{conn: conn} do
