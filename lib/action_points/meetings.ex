@@ -137,6 +137,61 @@ defmodule ActionPoints.Meetings do
     |> Repo.update!()
   end
 
+  ## Review curation
+
+  @doc """
+  Fetches an Action Point only if its Extraction belongs to the given session
+  token. Raises `Ecto.NoResultsError` otherwise, so a visitor can never curate
+  another session's Review.
+  """
+  def get_action_point!(id, session_token) when is_binary(session_token) do
+    Repo.one!(
+      from ap in ActionPoint,
+        join: e in assoc(ap, :extraction),
+        where: ap.id == ^id and e.session_token == ^session_token
+    )
+  end
+
+  @doc """
+  Marks an Action Point accepted or rejected. Rejection is reversible — the
+  row keeps everything except its standing in the Review.
+  """
+  def set_action_point_status(%ActionPoint{} = action_point, status)
+      when status in [:accepted, :rejected] do
+    action_point
+    |> Ecto.Changeset.change(status: status)
+    |> Repo.update!()
+  end
+
+  @doc """
+  Returns a changeset for the Review's inline-edit form.
+  """
+  def change_action_point(%ActionPoint{} = action_point, attrs \\ %{}) do
+    ActionPoint.curation_changeset(action_point, attrs)
+  end
+
+  @doc """
+  Applies the user's Review edits to an Action Point.
+  """
+  def update_action_point(%ActionPoint{} = action_point, attrs) do
+    action_point
+    |> ActionPoint.curation_changeset(attrs)
+    |> Repo.update()
+  end
+
+  @doc """
+  Counts the Action Points still accepted in an Extraction's Review — the
+  number the Push button promises to create.
+  """
+  def count_accepted_action_points(extraction_id) do
+    Repo.aggregate(
+      from(ap in ActionPoint,
+        where: ap.extraction_id == ^extraction_id and ap.status == :accepted
+      ),
+      :count
+    )
+  end
+
   ## PubSub
 
   @doc """
