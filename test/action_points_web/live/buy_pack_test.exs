@@ -38,7 +38,11 @@ defmodule ActionPointsWeb.BuyPackTest do
     {:ok, lv, _html} = live(conn, ~p"/buy")
 
     lv |> element("#buy-pack") |> render_click()
-    assert has_element?(lv, "#flash-error", "Checkout is unavailable")
+
+    # The failure states its case beside the button that caused it, and repeats
+    # the promise that matters at the payment moment.
+    assert has_element?(lv, "#checkout-unavailable", "Nothing was charged")
+    assert has_element?(lv, "#buy-pack")
   end
 
   test "the return page reflects the webhook's grant without writing one", %{
@@ -57,6 +61,10 @@ defmodule ActionPointsWeb.BuyPackTest do
 
     assert has_element?(lv, "#checkout-success", "Payment received")
     assert has_element?(lv, "#credit-balance", "16")
+
+    # The loop closes on the next move, not on the same pitch again.
+    assert has_element?(lv, "#checkout-success a", "Extract a Transcript")
+    refute has_element?(lv, "#buy-pack")
 
     # signup grant + the webhook's grant — the return page added nothing
     assert Repo.aggregate(CreditTransaction, :count) == 2
@@ -90,5 +98,40 @@ defmodule ActionPointsWeb.BuyPackTest do
              from(t in CreditTransaction, where: t.user_id == ^user.id),
              :count
            ) == 1
+  end
+
+  describe "the Credits gate" do
+    test "an empty balance meets the gate, with the Pack under it", %{conn: conn, user: user} do
+      zero_out_balance(user)
+
+      {:ok, lv, _html} = live(conn, ~p"/buy")
+
+      assert has_element?(lv, "#credits-gate", "out of Credits")
+      assert has_element?(lv, "#pack")
+      assert has_element?(lv, "#buy-pack")
+    end
+
+    test "an account that still has Credits is never told it is out", %{conn: conn} do
+      {:ok, lv, _html} = live(conn, ~p"/buy")
+
+      refute has_element?(lv, "#credits-gate")
+      assert has_element?(lv, "#pack")
+    end
+
+    # A Pack is priced in Credits and sized in meetings — the one place the
+    # glossary sanctions meetings as a unit.
+    test "the Pack is named in Credits and sized in meetings", %{conn: conn} do
+      {:ok, lv, _html} = live(conn, ~p"/buy")
+
+      assert has_element?(lv, "#pack", "15 Credits — 15 meetings")
+    end
+  end
+
+  defp zero_out_balance(user) do
+    Repo.insert!(%CreditTransaction{
+      user_id: user.id,
+      amount: -1,
+      kind: :extraction_consumption
+    })
   end
 end

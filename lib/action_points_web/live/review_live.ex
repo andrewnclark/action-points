@@ -506,11 +506,9 @@ defmodule ActionPointsWeb.ReviewLive do
       :ok ->
         {:noreply, assign_extraction(socket, refetch_extraction(socket))}
 
+      # Same doorway as the landing page: the buy page carries the reason.
       {:error, :out_of_credits} ->
-        {:noreply,
-         socket
-         |> put_flash(:error, "You're out of Credits — a Pack covers your next 15 meetings.")
-         |> push_navigate(to: ~p"/buy")}
+        {:noreply, push_navigate(socket, to: ~p"/buy")}
     end
   end
 
