@@ -8,3 +8,7 @@ Users connect by pasting a personal API key rather than OAuth. OAuth is the righ
 
 - Multiple integrations at launch — rejected: one done well beats three half-wired, and "for teams who run their meetings into Linear" is crisper positioning.
 - OAuth from day one — rejected for launch; revisit when the audience is less tolerant of pasting API keys.
+
+## Amendment (implementation, 2026-07-26)
+
+The behaviour landed as `validate_credentials/1`, `list_teams/1`, `list_users/1`, and `push_task/3` — pushing one task per call rather than the sketched batch `push_tasks/2`. Per-task pushing gives each Action Point its own created-issue reference, so a mid-Push failure records exactly what was created and a retry creates only the missing ones.

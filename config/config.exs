@@ -27,6 +27,9 @@ config :action_points,
 # The Extractor port: real adapter is Claude; tests swap in a fake
 config :action_points, :extractor, ActionPoints.Meetings.Extractor.Claude
 
+# The Task Sink port: real adapter is Linear; tests swap in a fake
+config :action_points, :task_sink, ActionPoints.Sinks.Linear
+
 # Subtitle types for the Transcript upload — not in the MIME defaults
 config :mime, :types, %{
   "text/vtt" => ["vtt"],

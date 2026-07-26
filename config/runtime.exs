@@ -56,6 +56,16 @@ if config_env() == :prod do
       You can generate one by calling: mix phx.gen.secret
       """
 
+  sink_encryption_key =
+    System.get_env("SINK_ENCRYPTION_KEY") ||
+      raise """
+      environment variable SINK_ENCRYPTION_KEY is missing.
+      It encrypts stored Task Sink API keys at rest.
+      You can generate one by calling: openssl rand -base64 32
+      """
+
+  config :action_points, ActionPoints.Vault, key: sink_encryption_key
+
   host = System.get_env("PHX_HOST") || "example.com"
   port = String.to_integer(System.get_env("PORT") || "4000")
 

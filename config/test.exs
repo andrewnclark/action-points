@@ -42,3 +42,9 @@ config :phoenix_live_view,
 
 # Replace the Extractor port with the test fake (test/support/fake_extractor.ex)
 config :action_points, :extractor, ActionPoints.Meetings.FakeExtractor
+
+# Replace the Task Sink port with the test fake (test/support/fake_task_sink.ex)
+config :action_points, :task_sink, ActionPoints.Sinks.FakeTaskSink
+
+# Static test-only key for secrets-at-rest encryption (Linear API keys)
+config :action_points, ActionPoints.Vault, key: "xITk6G+AL1vTy2/V6LBQZlTLZSJXDqSx9iKHGVP1+ow="
