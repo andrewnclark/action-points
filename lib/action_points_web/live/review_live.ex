@@ -478,11 +478,10 @@ defmodule ActionPointsWeb.ReviewLive do
       socket.assigns.pushing? ->
         {:noreply, socket}
 
+      # No flash: the signup screen reads the session for itself and says what
+      # is being kept, in a panel that survives the next click.
       is_nil(scope) ->
-        {:noreply,
-         socket
-         |> put_flash(:info, "Create a free account to Push — your Review is saved.")
-         |> push_navigate(to: ~p"/users/register")}
+        {:noreply, push_navigate(socket, to: ~p"/users/register")}
 
       is_nil(Sinks.get_connection(scope)) ->
         {:noreply,

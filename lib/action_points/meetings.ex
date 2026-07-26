@@ -116,6 +116,36 @@ defmodule ActionPoints.Meetings do
   end
 
   @doc """
+  How many Action Points are waiting to Push on the Demo Review an anonymous
+  session is carrying — or `nil` when there is no Demo behind the visitor at
+  all. Zero is a real answer: a Review whose Action Points were all rejected
+  still carries over.
+
+  Read-only counterpart to `claim_session_extractions/2`: the signup screens use
+  it to state what is being kept, so the carry-over is said by the page the
+  visitor is looking at rather than by a flash that evaporates behind them.
+  """
+  def session_review_pushable_count(session_token) do
+    case session_review(session_token) do
+      nil -> nil
+      extraction -> count_pushable_action_points(extraction.id)
+    end
+  end
+
+  # The Review a session is carrying: its most recent succeeded, unclaimed
+  # Extraction. A running or failed one is not a Review to carry.
+  defp session_review(nil), do: nil
+
+  defp session_review(session_token) when is_binary(session_token) do
+    Repo.one(
+      from e in Extraction,
+        where: e.session_token == ^session_token and is_nil(e.user_id) and e.status == :succeeded,
+        order_by: [desc: e.id],
+        limit: 1
+    )
+  end
+
+  @doc """
   Fetches an Extraction (with its Action Points) only if it belongs to the
   given session token. Raises `Ecto.NoResultsError` otherwise, so a visitor
   can never read another session's Review.
