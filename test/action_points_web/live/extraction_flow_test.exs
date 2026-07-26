@@ -130,6 +130,84 @@ defmodule ActionPointsWeb.ExtractionFlowTest do
     end)
   end
 
+  test "visitor uploads a .vtt export and it feeds the same pipeline as paste", %{conn: conn} do
+    stub_extractor(
+      {:ok,
+       [
+         %{
+           title: "Send the Q3 report to finance",
+           description: "Priya committed to sending the Q3 report.",
+           assignee_guess: "Priya",
+           due_date: nil
+         }
+       ]}
+    )
+
+    vtt = """
+    WEBVTT
+
+    1
+    00:00:03.600 --> 00:00:06.240
+    Priya Sharma: I'll send the Q3 report to finance by Friday.
+
+    2
+    00:00:06.900 --> 00:00:10.170
+    Tom Baker: Great. I'll book the venue for the offsite.
+    """
+
+    conn = get(conn, ~p"/")
+    {:ok, home, _html} = live(conn)
+
+    home
+    |> file_input("#transcript-form", :transcript, [
+      %{name: "zoom-meeting.vtt", content: vtt, type: "text/vtt"}
+    ])
+    |> render_upload("zoom-meeting.vtt")
+
+    result =
+      home
+      |> form("#transcript-form", extraction: %{transcript_text: ""})
+      |> render_submit()
+
+    {:ok, review, _html} = follow_redirect(result, conn)
+
+    eventually(fn ->
+      assert has_element?(review, "#action-points li", "Send the Q3 report to finance")
+    end)
+
+    # The stored Transcript is the normalised text, not the raw cue file.
+    extraction = ActionPoints.Repo.one!(ActionPoints.Meetings.Extraction)
+    refute extraction.transcript_text =~ "WEBVTT"
+    refute extraction.transcript_text =~ "-->"
+    assert extraction.transcript_text =~ "Priya Sharma: I'll send the Q3 report"
+  end
+
+  test "an over-cap transcript is rejected with a clear message, pre-Extraction", %{conn: conn} do
+    conn = get(conn, ~p"/")
+    {:ok, home, _html} = live(conn)
+
+    home
+    |> form("#transcript-form",
+      extraction: %{transcript_text: String.duplicate("word ", 25_001)}
+    )
+    |> render_submit()
+
+    assert has_element?(home, "#transcript-form", "25,000-word cap")
+    assert ActionPoints.Repo.aggregate(ActionPoints.Meetings.Extraction, :count) == 0
+  end
+
+  test "a trivially short input is rejected helpfully", %{conn: conn} do
+    conn = get(conn, ~p"/")
+    {:ok, home, _html} = live(conn)
+
+    home
+    |> form("#transcript-form", extraction: %{transcript_text: "buy milk"})
+    |> render_submit()
+
+    assert has_element?(home, "#transcript-form", "is too short to be a meeting transcript")
+    assert ActionPoints.Repo.aggregate(ActionPoints.Meetings.Extraction, :count) == 0
+  end
+
   test "a blank transcript is rejected without creating an Extraction", %{conn: conn} do
     conn = get(conn, ~p"/")
     {:ok, home, _html} = live(conn)
