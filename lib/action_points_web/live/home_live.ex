@@ -301,11 +301,11 @@ defmodule ActionPointsWeb.HomeLive do
         Meetings.start_extraction(extraction)
         {:noreply, push_navigate(socket, to: ~p"/review/#{extraction}")}
 
+      # The gate is a screen, not a toast: the buy page reads the empty balance
+      # for itself, so a flash would only say the same thing twice and then
+      # evaporate.
       {:error, :out_of_credits} ->
-        {:noreply,
-         socket
-         |> put_flash(:error, "You're out of Credits — a Pack covers your next 15 meetings.")
-         |> push_navigate(to: ~p"/buy")}
+        {:noreply, push_navigate(socket, to: ~p"/buy")}
 
       {:error, :rate_limited} ->
         {:noreply, assign(socket, :rate_limited?, true)}
