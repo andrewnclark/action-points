@@ -24,6 +24,9 @@ config :action_points,
   ecto_repos: [ActionPoints.Repo],
   generators: [timestamp_type: :utc_datetime]
 
+# The Extractor port: real adapter is Claude; tests swap in a fake
+config :action_points, :extractor, ActionPoints.Meetings.Extractor.Claude
+
 # Configures the endpoint
 config :action_points, ActionPointsWeb.Endpoint,
   url: [host: "localhost"],

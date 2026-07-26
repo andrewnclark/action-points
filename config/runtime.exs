@@ -20,6 +20,12 @@ if System.get_env("PHX_SERVER") do
   config :action_points, ActionPointsWeb.Endpoint, server: true
 end
 
+# Read in every environment; the Claude adapter refuses to run without a key,
+# and tests never reach it (the Extractor port is faked there).
+if api_key = System.get_env("ANTHROPIC_API_KEY") do
+  config :action_points, ActionPoints.Meetings.Extractor.Claude, api_key: api_key
+end
+
 if config_env() == :prod do
   database_url =
     System.get_env("DATABASE_URL") ||

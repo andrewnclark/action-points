@@ -12,8 +12,8 @@ defmodule ActionPoints.Application do
       ActionPoints.Repo,
       {DNSCluster, query: Application.get_env(:action_points, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: ActionPoints.PubSub},
-      # Start a worker by calling: ActionPoints.Worker.start_link(arg)
-      # {ActionPoints.Worker, arg},
+      # Runs Extractions (and other slow work) outside the request cycle
+      {Task.Supervisor, name: ActionPoints.TaskSupervisor},
       # Start to serve requests, typically the last entry
       ActionPointsWeb.Endpoint
     ]

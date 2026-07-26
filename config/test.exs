@@ -39,3 +39,6 @@ config :phoenix, :plug_init_mode, :runtime
 # Enable helpful, but potentially expensive runtime checks
 config :phoenix_live_view,
   enable_expensive_runtime_checks: true
+
+# Replace the Extractor port with the test fake (test/support/fake_extractor.ex)
+config :action_points, :extractor, ActionPoints.Meetings.FakeExtractor
