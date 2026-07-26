@@ -179,4 +179,60 @@
     background-color: var(--color-accent);
     color: var(--color-accent-content);
   }
+
+  /* The transcript composer reads as one surface — head bar, textarea, dropzone,
+     and actions inside a single border — so the textarea's own focus ring is
+     suppressed and the whole box takes the ring instead. Without this the
+     keyboard user gets no visible focus on the page's primary control. */
+  .composer:has(textarea:focus-visible) {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  /* The upload input is visually hidden so the dropzone can be the affordance,
+     but it stays focusable — so the dropzone shows the ring on its behalf. */
+  .dropzone:has(input:focus-visible) {
+    outline: 2px solid var(--color-accent);
+    outline-offset: -2px;
+  }
+
+  /* The Extraction wait is a screen users see on every run, and it has no
+     percentage to report — the model either returns or it doesn't. So the bar
+     shows liveness rather than progress: a sweep that says the run is alive
+     without implying a position it can't know. */
+  .sweep {
+    position: relative;
+    overflow: hidden;
+    background-color: var(--color-base-300);
+  }
+
+  .sweep::after {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    left: 0;
+    width: 40%;
+    border-radius: inherit;
+    background-color: var(--color-primary);
+    animation: sweep 1.4s ease-in-out infinite;
+  }
+
+  @keyframes sweep {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(350%);
+    }
+  }
+
+  /* Motion is the whole point of the bar, so with motion turned down it stops
+     travelling and simply stays lit rather than disappearing. */
+  @media (prefers-reduced-motion: reduce) {
+    .sweep::after {
+      width: 100%;
+      opacity: 0.55;
+      animation: none;
+    }
+  }
 }
