@@ -47,18 +47,7 @@ defmodule ActionPointsWeb.Layouts do
       below `sm` the cluster wraps onto its own row rather than scrolling the
       whole page sideways. --%>
       <nav class="mx-auto flex max-w-[1180px] flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-2 sm:h-13 sm:flex-nowrap sm:py-0 sm:px-6 lg:px-8">
-        <.link
-          navigate={~p"/"}
-          class="flex w-fit items-center gap-2 font-semibold tracking-[-0.02em]"
-        >
-          <span
-            class="grid size-[18px] place-items-center rounded-[4px] bg-linear-to-br from-accent to-primary text-[11px] font-bold text-base-100"
-            aria-hidden="true"
-          >
-            ▲
-          </span>
-          ActionPoints
-        </.link>
+        <.wordmark navigate={~p"/"} />
 
         <div class="flex items-center gap-1 text-xs text-base-content/70">
           <%!-- The Credit balance renders here rather than in the root layout so
@@ -102,6 +91,47 @@ defmodule ActionPointsWeb.Layouts do
     </main>
 
     <.flash_group flash={@flash} />
+    """
+  end
+
+  @doc """
+  The one mark the product has.
+
+  Shared because the shell is not the only place it appears: the error pages
+  render outside `app/1` — no navigation, no `current_scope` — and are the one
+  screen where a drifting wordmark would be least likely to be noticed.
+
+  Takes `navigate` inside the app, where the shell is already live, and `href`
+  on the error pages, which are static documents with no socket to push to.
+
+  ## Examples
+
+      <Layouts.wordmark navigate={~p"/"} />
+      <Layouts.wordmark href={~p"/"} class="mx-auto" />
+  """
+  attr :class, :string, default: nil
+  attr :rest, :global, include: ~w(href navigate)
+
+  def wordmark(assigns) do
+    ~H"""
+    <.link
+      class={["flex w-fit items-center gap-2 font-semibold tracking-[-0.02em]", @class]}
+      {@rest}
+    >
+      <%!-- The mark is drawn, not typed. Inter ships here as a latin subset and
+      has no U+25B2, so a ▲ glyph fell through to whatever the visitor's system
+      happened to offer — a different triangle per OS for the one mark that has
+      to be the same everywhere. --%>
+      <span
+        class="grid size-[18px] place-items-center rounded-[4px] bg-linear-to-br from-accent to-primary text-base-100"
+        aria-hidden="true"
+      >
+        <svg viewBox="0 0 10 9" class="w-[9px]" fill="currentColor" aria-hidden="true">
+          <path d="M5 0 10 9H0z" />
+        </svg>
+      </span>
+      ActionPoints
+    </.link>
     """
   end
 
@@ -202,12 +232,14 @@ defmodule ActionPointsWeb.Layouts do
 
   # A quiet account link in the navigation: the shell's links recede so the
   # wordmark and the Credit balance are the only things with weight up there.
+  # Never wrapped — the cluster wraps as a row on a phone, but "Log out" broken
+  # across two lines just looks like a mistake.
   attr :rest, :global, include: ~w(href method)
   slot :inner_block, required: true
 
   defp nav_link(assigns) do
     ~H"""
-    <.link class="rounded-field px-2 py-1 hover:text-base-content" {@rest}>
+    <.link class="rounded-field px-2 py-1 whitespace-nowrap hover:text-base-content" {@rest}>
       {render_slot(@inner_block)}
     </.link>
     """
@@ -229,27 +261,32 @@ defmodule ActionPointsWeb.Layouts do
       <.flash kind={:info} flash={@flash} />
       <.flash kind={:error} flash={@flash} />
 
+      <%!-- The two connection toasts every tester eventually sees. Stock
+      phx.new writes them as "We can't find the internet" and "Something went
+      wrong!"; in this product's voice they say which end broke and that the
+      Review is not what is at risk — Action Points live on the server, so a
+      dropped socket loses a connection, never curation. --%>
       <.flash
         id="client-error"
         kind={:error}
-        title={gettext("We can't find the internet")}
+        title={gettext("You've gone offline")}
         phx-disconnected={show(".phx-client-error #client-error") |> JS.remove_attribute("hidden")}
         phx-connected={hide("#client-error") |> JS.set_attribute({"hidden", ""})}
         hidden
       >
-        {gettext("Attempting to reconnect")}
+        {gettext("Reconnecting — your Review is kept")}
         <.icon name="hero-arrow-path" class="ml-1 size-3 motion-safe:animate-spin" />
       </.flash>
 
       <.flash
         id="server-error"
         kind={:error}
-        title={gettext("Something went wrong!")}
+        title={gettext("Lost the connection at our end")}
         phx-disconnected={show(".phx-server-error #server-error") |> JS.remove_attribute("hidden")}
         phx-connected={hide("#server-error") |> JS.set_attribute({"hidden", ""})}
         hidden
       >
-        {gettext("Attempting to reconnect")}
+        {gettext("Reconnecting — your Review is kept")}
         <.icon name="hero-arrow-path" class="ml-1 size-3 motion-safe:animate-spin" />
       </.flash>
     </div>

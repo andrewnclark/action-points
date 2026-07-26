@@ -29,7 +29,9 @@ defmodule ActionPointsWeb.SinkSettingsLive do
                 required
               />
               <p class="mt-1 text-xs text-base-content/65">
-                Create one in Linear under Settings &rarr; Security &amp; access &rarr;
+                <%!-- &rsaquo; rather than an arrow: the self-hosted Inter subset
+                has no U+2192, and a breadcrumb is not worth a font fallback. --%>
+                Create one in Linear under Settings &rsaquo; Security &amp; access &rsaquo;
                 personal API keys. We check it with Linear before saving anything.
               </p>
 
