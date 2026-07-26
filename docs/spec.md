@@ -21,7 +21,7 @@ ActionPoints takes a meeting Transcript (pasted, or an uploaded `.txt`/`.vtt`/`.
 ### Trying it (anonymous visitor)
 
 1. As a visitor, I want to paste a transcript on the landing page and see Action Points extracted without creating an account, so that I can judge the product before giving up my email.
-2. As a visitor, I want the landing-page demo to be the real Review screen (minus the Push button), so that what I'm evaluating is what I'd be buying.
+2. As a visitor, I want the landing-page Demo to be the real Review screen (its Push button doubling as the signup gate — see story 4), so that what I'm evaluating is what I'd be buying.
 3. As a visitor, I want a sample transcript I can load with one click, so that I can see the product work even when I don't have a meeting transcript to hand.
 4. As a visitor, I want to be told clearly that Pushing requires an account, so that the paywall boundary never surprises me mid-flow.
 5. As a visitor who signs up after previewing, I want my previewed Extraction to still be there after registration, so that I don't have to re-run it to Push.
@@ -84,7 +84,7 @@ ActionPoints takes a meeting Transcript (pasted, or an uploaded `.txt`/`.vtt`/`.
 
 ### Trust & operations
 
-41. As a visitor, I want the anonymous demo rate-limited, so that abuse can't burn the operator's API budget (and so the free preview survives launch day).
+41. As a visitor, I want the Demo rate-limited, so that abuse can't burn the operator's API budget (and so the Demo survives launch day).
 42. As a user, I want my Transcript handled only to produce my Action Points — not shared, with a plain-English one-liner saying so — so that I'm comfortable pasting internal meetings into a brand-new product.
 43. As the operator, I want the product live on a public URL with payments running end-to-end in Stripe test mode, so that flipping to live keys (if verification lands) is a config change, not a build task.
 
@@ -98,8 +98,8 @@ ActionPoints takes a meeting Transcript (pasted, or an uploaded `.txt`/`.vtt`/`.
   - **PaymentProvider** — create a Checkout session; verify and interpret webhook events. Real adapter: Stripe, one Product, `checkout.session.completed` only.
 - **Transcript normalisation** happens before the Extractor: `.vtt`/`.srt` parsed to plain text, cue/timestamp junk dropped, speaker labels kept as `Name:` prefixes. The word-count cap is enforced here, pre-Credit.
 - **Extraction runs async** (background job with LiveView progress state), not in the request cycle — LLM latency on a big transcript is tens of seconds.
-- **Review state is persisted server-side** (an Extraction and its Action Points are rows, with accepted/rejected/edited state), which is what lets an anonymous preview survive signup and lets a Push retry know what was already created.
-- **Anonymous preview** is the same Review LiveView keyed to the visitor's session, with Push gated behind auth; extraction from the landing page is rate-limited per IP/session and consumes no Credit (there's no account to charge).
+- **Review state is persisted server-side** (an Extraction and its Action Points are rows, with accepted/rejected/edited state), which is what lets the anonymous Demo survive signup and lets a Push retry know what was already created.
+- **The Demo** is the same Review LiveView keyed to the visitor's session, with Push gated behind auth; extraction from the landing page is rate-limited per IP/session and consumes no Credit (there's no account to charge).
 - **Credit ledger** (ADR-0003): an append-only transactions table (grants: signup seed, pack purchase; consumptions: successful Extraction) with the balance derived or cached; consumption is atomic with marking the Extraction successful, so a crash can't charge without delivering.
 - **Push idempotency:** each Action Point records its created-issue reference on success; retry pushes only unreferenced ones.
 - **Stripe webhook** is the only writer of purchase grants (redirect-back is untrusted), verified by signature; test mode throughout, live key as config.
@@ -109,7 +109,7 @@ ActionPoints takes a meeting Transcript (pasted, or an uploaded `.txt`/`.vtt`/`.
 
 - **One seam philosophy:** tests drive from the top — `ConnTest`/`LiveViewTest` walking real router → LiveViews → contexts → Postgres — with only the three external ports (Extractor, TaskSink, PaymentProvider) replaced by fakes. No mocking between internal modules; internal behaviour is asserted through what the UI and DB show.
 - **Good tests here assert external behaviour:** what the user sees on the Review screen, what rows the ledger holds, what the TaskSink fake was asked to create — never which internal function was called.
-- **The flows that must have top-level tests:** anonymous preview → signup → Push carry-over; happy path paste → Review → Push with credit decrement; failed Extraction charges nothing; zero-credit user is routed to purchase; webhook grants exactly 15 credits exactly once (replayed webhook is a no-op); partial Push retry creates no duplicates; oversize transcript rejected before charge.
+- **The flows that must have top-level tests:** Demo → signup → Push carry-over; happy path paste → Review → Push with credit decrement; failed Extraction charges nothing; zero-credit user is routed to purchase; webhook grants exactly 15 credits exactly once (replayed webhook is a no-op); partial Push retry creates no duplicates; oversize transcript rejected before charge.
 - **Pure functions tested directly where the top-level would be wasteful:** the `.vtt`/`.srt` normaliser and the word-count cap get plain unit tests on samples of real exports.
 - **Prior art:** greenfield — the convention *is* the prior art. `phx.gen.auth`'s generated tests set the house style; pipeline tests follow it.
 

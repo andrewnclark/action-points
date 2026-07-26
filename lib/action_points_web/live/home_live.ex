@@ -10,6 +10,20 @@ defmodule ActionPointsWeb.HomeLive do
   alias ActionPoints.Meetings.Extraction
   alias ActionPoints.Meetings.Transcript
 
+  # A canned product-team standup, for visitors with no transcript to hand.
+  @sample_transcript """
+  Maya: Right, quick one today. Where are we on the launch?
+  Dan: Landing page is done bar the pricing table. I'll have the pricing table finished by Thursday.
+  Maya: Good. Priya, the onboarding emails?
+  Priya: Drafted. I still owe the welcome email a proper subject line — I'll send the final versions to Maya for sign-off tomorrow.
+  Maya: Please. And someone needs to chase legal about the updated terms before we flip the switch.
+  Dan: I can take that. I'll email Sofia in legal today and ask for a yes/no by Friday.
+  Priya: One more thing — the signup form still breaks on Safari. Jonas said he'd look but he's out this week.
+  Maya: Then let's not wait. Dan, can you pick up the Safari signup bug once the pricing table's out the door?
+  Dan: Yep, fine.
+  Maya: I'll book the go/no-go call for Monday morning and send the invite round this afternoon. Anything else? No? Good — thanks all.
+  """
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -18,7 +32,8 @@ defmodule ActionPointsWeb.HomeLive do
         <div class="pt-10 pb-8 text-center">
           <h1 class="text-4xl font-bold">Turn a meeting transcript into tasks</h1>
           <p class="mt-4 text-lg text-base-content/70">
-            Paste the transcript. Review the extracted Action Points. Push the keepers to Linear.
+            Paste the transcript your meeting tool already made. Review the extracted
+            Action Points. Push the keepers to Linear — done before the next meeting starts.
           </p>
         </div>
 
@@ -73,14 +88,62 @@ defmodule ActionPointsWeb.HomeLive do
             </p>
           </div>
 
+          <p id="privacy-note" class="mt-3 text-center text-sm text-base-content/50">
+            Your transcript is only used to produce your Action Points — never shared.
+          </p>
+
           <button class="btn btn-primary w-full mt-4" phx-disable-with="Starting…">
             Extract Action Points
           </button>
         </.form>
 
-        <p class="mt-6 text-center text-sm text-base-content/50">
-          Your transcript is used only to produce your Action Points — never shared.
-        </p>
+        <button
+          type="button"
+          id="load-sample"
+          phx-click="load_sample"
+          phx-disable-with="Loading the sample…"
+          class="btn btn-ghost btn-sm mx-auto mt-3 flex text-base-content/70"
+        >
+          No transcript to hand? Try the sample meeting
+        </button>
+
+        <section id="how-it-works" class="mt-20">
+          <h2 class="text-center text-2xl font-bold">How it works</h2>
+          <ol class="mt-8 grid gap-6 sm:grid-cols-3">
+            <li class="card bg-base-200 p-5">
+              <span class="text-sm font-semibold text-primary">Step 1</span>
+              <h3 class="mt-1 font-semibold">Paste a transcript</h3>
+              <p class="mt-2 text-sm text-base-content/70">
+                Zoom, Teams, and Meet already export one. Paste the text or drop the
+                .txt, .vtt, or .srt file — timestamps get cleaned up for you.
+              </p>
+            </li>
+            <li class="card bg-base-200 p-5">
+              <span class="text-sm font-semibold text-primary">Step 2</span>
+              <h3 class="mt-1 font-semibold">Review the Action Points</h3>
+              <p class="mt-2 text-sm text-base-content/70">
+                Every commitment comes back with a title, context, an assignee guess,
+                and any due date said aloud. Reject the noise, edit the keepers.
+              </p>
+            </li>
+            <li class="card bg-base-200 p-5">
+              <span class="text-sm font-semibold text-primary">Step 3</span>
+              <h3 class="mt-1 font-semibold">Push to Linear</h3>
+              <p class="mt-2 text-sm text-base-content/70">
+                One click creates the accepted Action Points as real Linear issues —
+                with links back to each one, so nothing is lost in the meeting again.
+              </p>
+            </li>
+          </ol>
+        </section>
+
+        <section id="pricing" class="mt-16 pb-20 text-center">
+          <h2 class="text-2xl font-bold">Simple pricing</h2>
+          <p class="mx-auto mt-3 max-w-md text-base-content/70">
+            Your first meeting is free — every new account starts with one Credit.
+            After that, £5 buys a Pack of 15 meetings. No subscription.
+          </p>
+        </section>
       </div>
     </Layouts.app>
     """
@@ -113,6 +176,14 @@ defmodule ActionPointsWeb.HomeLive do
     # An uploaded file takes precedence over anything left in the textarea.
     attrs = consume_transcript_upload(socket) || params
 
+    start_extraction(socket, attrs)
+  end
+
+  def handle_event("load_sample", _params, socket) do
+    start_extraction(socket, %{"transcript_text" => @sample_transcript})
+  end
+
+  defp start_extraction(socket, attrs) do
     case Meetings.create_extraction(
            socket.assigns.current_scope,
            socket.assigns.session_token,
@@ -134,7 +205,7 @@ defmodule ActionPointsWeb.HomeLive do
          put_flash(
            socket,
            :error,
-           "The free preview is rate-limited — try again in a while, " <>
+           "The Demo is rate-limited — try again in a while, " <>
              "or create a free account for your Free Meeting."
          )}
 

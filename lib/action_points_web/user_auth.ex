@@ -7,6 +7,7 @@ defmodule ActionPointsWeb.UserAuth do
   alias ActionPoints.Accounts
   alias ActionPoints.Accounts.Scope
   alias ActionPoints.Billing
+  alias ActionPoints.Meetings
 
   # Make the remember me cookie valid for 14 days. This should match
   # the session validity setting in UserToken.
@@ -36,10 +37,19 @@ defmodule ActionPointsWeb.UserAuth do
   def log_in_user(conn, user, params \\ %{}) do
     user_return_to = get_session(conn, :user_return_to)
 
+    # Logging in claims the anonymous session's Extractions, and — unless a
+    # stored return-to wins — lands the user straight back on their Demo's
+    # Review, so Push works without re-running the Extraction.
+    claimed =
+      Meetings.claim_session_extractions(user, get_session(conn, :anon_session_token))
+
     conn
     |> create_or_extend_session(user, params)
-    |> redirect(to: user_return_to || signed_in_path(conn))
+    |> redirect(to: user_return_to || claimed_review_path(claimed) || signed_in_path(conn))
   end
+
+  defp claimed_review_path([]), do: nil
+  defp claimed_review_path([latest | _rest]), do: ~p"/review/#{latest}"
 
   @doc """
   Logs the user out.
@@ -144,10 +154,18 @@ defmodule ActionPointsWeb.UserAuth do
   defp renew_session(conn, _user) do
     delete_csrf_token()
 
+    # The anonymous session token keys the visitor's Demo Extraction —
+    # losing it at login would orphan the Review they came to Push.
+    anon_session_token = get_session(conn, :anon_session_token)
+
     conn
     |> configure_session(renew: true)
     |> clear_session()
+    |> restore_anon_session_token(anon_session_token)
   end
+
+  defp restore_anon_session_token(conn, nil), do: conn
+  defp restore_anon_session_token(conn, token), do: put_session(conn, :anon_session_token, token)
 
   defp maybe_write_remember_me_cookie(conn, token, %{"remember_me" => "true"}, _),
     do: write_remember_me_cookie(conn, token)

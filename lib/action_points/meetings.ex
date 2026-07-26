@@ -58,14 +58,7 @@ defmodule ActionPoints.Meetings do
     ensure_credit_available(scope)
   end
 
-  # Checked at attempt time, consumed at success time — two concurrent
-  # successes on a one-Credit balance can briefly overdraw. Accepted for the
-  # MVP: the ledger stays truthful and the next attempt is gated.
-  defp ensure_credit_available(scope) do
-    if Billing.balance(scope) >= 1, do: :ok, else: {:error, :out_of_credits}
-  end
-
-  # The anonymous preview is free, so it is rate-limited instead. Both keys
+  # The anonymous Demo is free, so it is rate-limited instead. Both keys
   # must allow; the check short-circuits, so a denied session key doesn't
   # count against the IP.
   defp gate_new_extraction(nil, session_token, opts) do
@@ -84,6 +77,42 @@ defmodule ActionPoints.Meetings do
       end)
 
     if allowed?, do: :ok, else: {:error, :rate_limited}
+  end
+
+  # Checked at attempt time, consumed at success time — two concurrent
+  # successes on a one-Credit balance can briefly overdraw. Accepted for the
+  # MVP: the ledger stays truthful and the next attempt is gated.
+  defp ensure_credit_available(scope) do
+    if Billing.balance(scope) >= 1, do: :ok, else: {:error, :out_of_credits}
+  end
+
+  @doc """
+  Claims the anonymous session's Extractions for a user who just signed in —
+  the moment the Demo's Review starts belonging to an account instead of a
+  browser. Only unowned Extractions are touched, so a shared browser can never
+  reassign another account's work. The ledger is untouched: the Extraction ran
+  anonymously, and anonymous Extractions are free.
+
+  Returns the claimed Extractions, most recently created first (by id — the
+  insertion order).
+  """
+  def claim_session_extractions(%User{}, nil), do: []
+
+  def claim_session_extractions(%User{id: user_id}, session_token)
+      when is_binary(session_token) do
+    {_count, extractions} =
+      Repo.update_all(
+        from(e in Extraction,
+          where: e.session_token == ^session_token and is_nil(e.user_id),
+          select: e
+        ),
+        set: [
+          user_id: user_id,
+          updated_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        ]
+      )
+
+    Enum.sort_by(extractions, & &1.id, :desc)
   end
 
   @doc """
