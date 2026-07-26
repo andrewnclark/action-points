@@ -34,6 +34,22 @@ _Avoid_: integration, destination, provider
 The anonymous run of the pipeline from the landing page: a real Extraction and Review, keyed to the visitor's session instead of an account. Rate-limited rather than charged; signup is required only at Push, and the Demo's Review carries over through it.
 _Avoid_: preview, free preview, trial
 
+**Assignee Mapping**:
+A remembered link from a guessed name to one Task Sink user, scoped to a Sink Connection (it dies with the connection). Born during Review the first time a name is resolved; thereafter that name resolves automatically. Push assigns only what Review resolved — nothing is matched silently at Push.
+_Avoid_: user sync, alias, name matching
+
+**Grounding Quote**:
+A short verbatim excerpt from the Transcript attached to an Action Point as evidence, verified to actually appear in the Transcript. Travels with the Action Point into the Task Sink.
+_Avoid_: citation, snippet, source
+
+**Blocker**:
+A blocked-by relation between two Action Points of the same Extraction, proposed by the Extraction and curated at Review; realised as a real relation in the Task Sink at Push. Relations to pre-existing tasks in the sink are out of scope.
+_Avoid_: dependency, linked issue
+
+**Subtask**:
+An Action Point nested one level under a parent Action Point from the same Extraction — proposed only when the meeting itself broke a deliverable into pieces, never deeper than one level. Rejecting the parent promotes its Subtasks. Blockers and nesting are orthogonal.
+_Avoid_: child issue, sub-issue, checklist item
+
 ### Commerce
 
 **Credit**:
