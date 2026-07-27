@@ -205,6 +205,79 @@ defmodule ActionPointsWeb.ExtractionFlowTest do
     assert ActionPoints.Repo.aggregate(ActionPoints.Meetings.Extraction, :count) == 0
   end
 
+  test "the Review says which date deadlines resolve against, from the browser's local date",
+       %{conn: conn} do
+    stub_extractor(
+      {:ok,
+       [
+         %{
+           title: "Send the Q3 report to finance",
+           description: nil,
+           assignee_guess: nil,
+           due_date: nil
+         }
+       ]}
+    )
+
+    conn = conn |> get(~p"/") |> put_connect_params(%{"local_date" => "2026-07-26"})
+    {:ok, home, _html} = live(conn)
+
+    result =
+      home
+      |> form("#transcript-form", extraction: %{transcript_text: @transcript})
+      |> render_submit()
+
+    {:ok, review, _html} = follow_redirect(result, conn)
+
+    extraction = ActionPoints.Repo.one!(ActionPoints.Meetings.Extraction)
+    assert extraction.meeting_date == ~D[2026-07-26]
+    assert extraction.meeting_date_source == :assumed
+
+    eventually(fn ->
+      assert has_element?(review, "#meeting-date", "Deadlines resolved relative to Sun 26 Jul")
+      assert has_element?(review, "#meeting-date", "(assumed)")
+    end)
+  end
+
+  test "a browser date that isn't a date falls back to the server's own", %{conn: conn} do
+    stub_extractor({:ok, []})
+
+    conn = conn |> get(~p"/") |> put_connect_params(%{"local_date" => "sometime today"})
+    {:ok, home, _html} = live(conn)
+
+    result =
+      home
+      |> form("#transcript-form", extraction: %{transcript_text: @transcript})
+      |> render_submit()
+
+    {:ok, review, _html} = follow_redirect(result, conn)
+    eventually(fn -> assert has_element?(review, "#review-empty") end)
+
+    extraction = ActionPoints.Repo.one!(ActionPoints.Meetings.Extraction)
+    assert extraction.meeting_date == Date.utc_today()
+    assert extraction.meeting_date_source == :assumed
+  end
+
+  test "an Extraction started without connect params still records a meeting date",
+       %{conn: conn} do
+    stub_extractor({:ok, []})
+
+    conn = get(conn, ~p"/")
+    {:ok, home, _html} = live(conn)
+
+    result =
+      home
+      |> form("#transcript-form", extraction: %{transcript_text: @transcript})
+      |> render_submit()
+
+    {:ok, review, _html} = follow_redirect(result, conn)
+    eventually(fn -> assert has_element?(review, "#review-empty") end)
+
+    extraction = ActionPoints.Repo.one!(ActionPoints.Meetings.Extraction)
+    assert extraction.meeting_date == Date.utc_today()
+    assert extraction.meeting_date_source == :assumed
+  end
+
   test "an Extraction is not visible to a different anonymous session", %{conn: conn} do
     {:ok, extraction} =
       ActionPoints.Meetings.create_extraction(nil, "someone-elses-session", %{

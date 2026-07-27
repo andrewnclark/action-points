@@ -26,9 +26,20 @@ import {hooks as colocatedHooks} from "phoenix-colocated/action_points"
 import topbar from "../vendor/topbar"
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
+
+// The visitor's own local date (never a time, never a timezone) — the fallback
+// anchor an Extraction resolves relative deadlines against.
+const localDate = () => {
+  const now = new Date()
+  const pad = n => String(n).padStart(2, "0")
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+}
+
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
-  params: {_csrf_token: csrfToken},
+  // A closure, so a tab left open overnight reconnects with the new day's
+  // date rather than the day it was opened.
+  params: () => ({_csrf_token: csrfToken, local_date: localDate()}),
   hooks: {...colocatedHooks},
 })
 
