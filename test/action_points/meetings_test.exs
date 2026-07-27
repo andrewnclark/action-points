@@ -171,6 +171,59 @@ defmodule ActionPoints.MeetingsTest do
       assert extraction.meeting_date_source == :assumed
     end
 
+    test "a meeting date stated in the Transcript wins over the filename date" do
+      stub_extractor({:ok, %{action_points: [], meeting_date: ~D[2026-05-04]}})
+
+      {:ok, extraction} =
+        Meetings.create_extraction(nil, "session", %{"transcript_text" => @transcript},
+          local_date: ~D[2026-07-20],
+          filename: "GMT20260312-140000_Recording.transcript.vtt"
+        )
+
+      Meetings.run_extraction(extraction)
+
+      reloaded = Meetings.get_extraction!(extraction.id, "session")
+      assert reloaded.meeting_date == ~D[2026-05-04]
+      assert reloaded.meeting_date_source == :transcript
+    end
+
+    test "no stated date leaves the established meeting date and source untouched" do
+      stub_extractor({:ok, %{action_points: [], meeting_date: nil}})
+
+      {:ok, extraction} =
+        Meetings.create_extraction(nil, "session", %{"transcript_text" => @transcript},
+          filename: "GMT20260312-140000_Recording.transcript.vtt"
+        )
+
+      Meetings.run_extraction(extraction)
+
+      reloaded = Meetings.get_extraction!(extraction.id, "session")
+      assert reloaded.meeting_date == ~D[2026-03-12]
+      assert reloaded.meeting_date_source == :filename
+    end
+
+    # The anchor moves only on a date the model reports as *this meeting's*.
+    # Dates spoken in conversation are never scanned out of the Transcript body.
+    test "a date merely mentioned in conversation does not become the meeting date" do
+      stub_extractor({:ok, %{action_points: [], meeting_date: nil}})
+
+      {:ok, extraction} =
+        Meetings.create_extraction(
+          nil,
+          "session",
+          %{
+            "transcript_text" => "Priya: The board meets on the 3rd of March 2026, so let's wait."
+          },
+          local_date: ~D[2026-07-20]
+        )
+
+      Meetings.run_extraction(extraction)
+
+      reloaded = Meetings.get_extraction!(extraction.id, "session")
+      assert reloaded.meeting_date == ~D[2026-07-20]
+      assert reloaded.meeting_date_source == :assumed
+    end
+
     test "a retry keeps a meeting date derived from the filename" do
       stub_extractor({:error, :api_unavailable})
 

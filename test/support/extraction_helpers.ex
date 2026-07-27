@@ -9,14 +9,25 @@ defmodule ActionPoints.ExtractionHelpers do
 
   @doc """
   Scripts the FakeExtractor's next result, restored on test exit.
+
+  A bare list of Action Points is shorthand for "and the Transcript stated no
+  meeting date", so the many tests with nothing to say about the meeting date
+  need not restate the whole port shape. The shorthand lives here rather than
+  in the double, which speaks only the port's own shape.
   """
   def stub_extractor(result) do
-    Application.put_env(:action_points, :fake_extractor_result, result)
+    Application.put_env(:action_points, :fake_extractor_result, expand(result))
 
     ExUnit.Callbacks.on_exit(fn ->
       Application.delete_env(:action_points, :fake_extractor_result)
     end)
   end
+
+  defp expand({:ok, action_points}) when is_list(action_points) do
+    {:ok, %{action_points: action_points, meeting_date: nil}}
+  end
+
+  defp expand(result), do: result
 
   @doc """
   Overrides the anonymous rate limits and resets the shared limiter, both

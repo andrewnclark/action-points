@@ -253,11 +253,11 @@ defmodule ActionPoints.Meetings do
   permanent spinner.
   """
   def run_extraction(%Extraction{} = extraction) do
-    extraction = update_status!(extraction, %{status: :running})
+    extraction = update_extraction!(extraction, %{status: :running})
     broadcast(extraction)
 
     case extractor().extract(extraction.transcript_text) do
-      {:ok, action_points} -> finalize_success(extraction, action_points)
+      {:ok, result} -> finalize_success(extraction, result)
       {:error, reason} -> finalize_failure(extraction, reason)
     end
   rescue
@@ -266,7 +266,7 @@ defmodule ActionPoints.Meetings do
       reraise(exception, __STACKTRACE__)
   end
 
-  defp finalize_success(extraction, action_points) do
+  defp finalize_success(extraction, %{action_points: action_points} = result) do
     {:ok, extraction} =
       Repo.transaction(fn ->
         # Idempotence: a re-run replaces, never appends
@@ -287,12 +287,25 @@ defmodule ActionPoints.Meetings do
           Billing.consume_extraction_credit!(extraction.user_id, extraction.id)
         end
 
-        update_status!(extraction, %{status: :succeeded})
+        update_extraction!(
+          extraction,
+          Map.merge(%{status: :succeeded}, stated_meeting_date(result))
+        )
       end)
 
     broadcast(extraction)
     extraction
   end
+
+  # The last link in the anchor chain, and the strongest: a date the Transcript
+  # itself states beats both the filename and the visitor's local date. It can
+  # only be applied here, because only the model can read it — which is why the
+  # anchor set at creation is provisional until the Extraction finalises.
+  defp stated_meeting_date(%{meeting_date: %Date{} = date}) do
+    %{meeting_date: date, meeting_date_source: :transcript}
+  end
+
+  defp stated_meeting_date(_no_date), do: %{}
 
   # Grounding Quotes are verified the moment the Extraction finalises: only
   # quotes that really appear in the normalised Transcript are stored, so a
@@ -303,12 +316,14 @@ defmodule ActionPoints.Meetings do
   end
 
   defp finalize_failure(extraction, reason) do
-    extraction = update_status!(extraction, %{status: :failed, failure_reason: to_string(reason)})
+    extraction =
+      update_extraction!(extraction, %{status: :failed, failure_reason: to_string(reason)})
+
     broadcast(extraction)
     extraction
   end
 
-  defp update_status!(extraction, attrs) do
+  defp update_extraction!(extraction, attrs) do
     extraction
     |> Ecto.Changeset.change(attrs)
     |> Repo.update!()
