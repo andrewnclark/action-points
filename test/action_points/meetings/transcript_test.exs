@@ -179,4 +179,46 @@ defmodule ActionPoints.Meetings.TranscriptTest do
       assert Transcript.format_from_filename("export") == :txt
     end
   end
+
+  describe "date_from_filename/1" do
+    test "reads the date out of the common meeting-tool exports" do
+      # Zoom
+      assert Transcript.date_from_filename("GMT20260312-140000_Recording.transcript.vtt") ==
+               ~D[2026-03-12]
+
+      # Teams
+      assert Transcript.date_from_filename("Weekly Sync-20260312_140000-Meeting Recording.vtt") ==
+               ~D[2026-03-12]
+
+      # Meet, and hand-named ISO exports
+      assert Transcript.date_from_filename("Product sync (2026-03-12 14:00 GMT).txt") ==
+               ~D[2026-03-12]
+
+      assert Transcript.date_from_filename("2026-03-12 standup.txt") == ~D[2026-03-12]
+      assert Transcript.date_from_filename("standup_2026_03_12.srt") == ~D[2026-03-12]
+    end
+
+    test "refuses ordering-ambiguous numeric dates" do
+      # 12 March or 3 December? Unknowable, so no signal beats a wrong one.
+      assert Transcript.date_from_filename("standup 12/03/2026.txt") == nil
+      assert Transcript.date_from_filename("standup-12-03-2026.vtt") == nil
+
+      # The nastiest form: the time trailing a day-first date would read as a
+      # perfectly plausible month and day if the year were read left to right.
+      assert Transcript.date_from_filename("standup 12-03-2026-10-05.vtt") == nil
+      assert Transcript.date_from_filename("standup_12_03_2026_1005.txt") == nil
+    end
+
+    test "refuses digit runs that aren't dates" do
+      assert Transcript.date_from_filename("meeting.txt") == nil
+      assert Transcript.date_from_filename("recording-00420260312.vtt") == nil
+      assert Transcript.date_from_filename("call 20261340.txt") == nil
+      assert Transcript.date_from_filename("part 12345.txt") == nil
+    end
+
+    test "takes the first real date when the name carries several numbers" do
+      assert Transcript.date_from_filename("v2 sync 20260312 (1080p 19201080).vtt") ==
+               ~D[2026-03-12]
+    end
+  end
 end

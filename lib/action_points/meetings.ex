@@ -15,6 +15,7 @@ defmodule ActionPoints.Meetings do
   alias ActionPoints.Meetings.ActionPoint
   alias ActionPoints.Meetings.Extraction
   alias ActionPoints.Meetings.GroundingQuote
+  alias ActionPoints.Meetings.Transcript
   alias ActionPoints.RateLimiter
   alias ActionPoints.Repo
 
@@ -37,18 +38,21 @@ defmodule ActionPoints.Meetings do
   and per IP (`{:error, :rate_limited}`, IP passed as `opts[:ip]`). Invalid
   input is reported first, so a fumbled form never burns the rate limit.
 
-  `opts[:local_date]` is the visitor's own local date as their browser reported
-  it (nil when it never arrived); the Extraction records it as its meeting date
-  with source `assumed`, falling back to the server's date.
+  The meeting date is settled here, best evidence first: an unambiguous date in
+  `opts[:filename]` (the uploaded file's own name), then `opts[:local_date]` —
+  the visitor's own local date as their browser reported it — and finally the
+  server's date when neither arrived.
   """
   def create_extraction(scope, session_token, attrs, opts \\ [])
       when is_binary(session_token) do
+    {meeting_date, meeting_date_source} = settle_meeting_date(opts)
+
     changeset =
       %Extraction{
         session_token: session_token,
         user_id: scope_user_id(scope),
-        meeting_date: assumed_meeting_date(opts),
-        meeting_date_source: :assumed
+        meeting_date: meeting_date,
+        meeting_date_source: meeting_date_source
       }
       |> Extraction.changeset(attrs)
 
@@ -220,8 +224,18 @@ defmodule ActionPoints.Meetings do
     end
   end
 
-  # The assumed anchor, in one place: the visitor's own local date when their
-  # browser supplied it, the server's date when it didn't.
+  # The anchor and where it came from, in one place. A filename date is
+  # evidence about the meeting itself, so it outranks the date the visitor
+  # happens to be uploading on.
+  defp settle_meeting_date(opts) do
+    case opts[:filename] && Transcript.date_from_filename(opts[:filename]) do
+      %Date{} = date -> {date, :filename}
+      _none -> {assumed_meeting_date(opts), :assumed}
+    end
+  end
+
+  # The assumed anchor: the visitor's own local date when their browser
+  # supplied it, the server's date when it didn't.
   defp assumed_meeting_date(opts), do: opts[:local_date] || Date.utc_today()
 
   defp gate_retry(%Extraction{user_id: nil}), do: :ok
