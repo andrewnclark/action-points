@@ -19,6 +19,12 @@ defmodule ActionPoints.Meetings.Extraction do
     field :status, Ecto.Enum, values: [:pending, :running, :succeeded, :failed], default: :pending
     field :failure_reason, :string
 
+    # The anchor every relative deadline resolves against, and where it came
+    # from: an unambiguous date in the uploaded filename, a date stated in the
+    # Transcript itself, or — failing both — the visitor's own local date.
+    field :meeting_date, :date
+    field :meeting_date_source, Ecto.Enum, values: [:filename, :transcript, :assumed]
+
     belongs_to :user, ActionPoints.Accounts.User
     has_many :action_points, ActionPoints.Meetings.ActionPoint, preload_order: [asc: :position]
 
