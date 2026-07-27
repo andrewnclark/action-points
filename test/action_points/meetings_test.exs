@@ -23,6 +23,32 @@ defmodule ActionPoints.MeetingsTest do
     Meetings.get_extraction!(extraction.id, session_token).action_points |> hd()
   end
 
+  # A transcript with a line break mid-sentence, so the whitespace-tolerance
+  # test has a real seam to cross.
+  @quoted_transcript """
+  Priya: I'll send the Q3 report to finance by Friday.
+  Tom: Remember the auditors need the draft first,
+  so the numbers must be final by Thursday.
+  """
+
+  # Runs an Extraction whose single Action Point carries the given attrs
+  # extras (e.g. quotes) and returns that Action Point as stored.
+  defp extract_action_point(extra_attrs) do
+    attrs =
+      Map.merge(
+        %{title: "Send the Q3 report", description: nil, assignee_guess: nil, due_date: nil},
+        extra_attrs
+      )
+
+    stub_extractor({:ok, [attrs]})
+
+    {:ok, extraction} =
+      Meetings.create_extraction(nil, "session", %{"transcript_text" => @quoted_transcript})
+
+    Meetings.run_extraction(extraction)
+    Meetings.get_extraction!(extraction.id, "session").action_points |> hd()
+  end
+
   describe "create_extraction/4" do
     test "normalises an uploaded .vtt so cue junk never reaches the Extractor" do
       vtt = """
@@ -281,6 +307,75 @@ defmodule ActionPoints.MeetingsTest do
 
       assert {:ok, _} =
                Meetings.create_extraction(scope, "session", %{"transcript_text" => @transcript})
+    end
+  end
+
+  describe "Grounding Quotes" do
+    test "quotes that appear in the Transcript are stored on the Action Point" do
+      action_point =
+        extract_action_point(%{quotes: ["I'll send the Q3 report to finance by Friday."]})
+
+      assert action_point.quotes == ["I'll send the Q3 report to finance by Friday."]
+    end
+
+    test "an invented quote is silently dropped and the Extraction still succeeds" do
+      action_point =
+        extract_action_point(%{
+          quotes: [
+            "We agreed to cancel the audit entirely.",
+            "I'll send the Q3 report to finance by Friday."
+          ]
+        })
+
+      assert action_point.quotes == ["I'll send the Q3 report to finance by Friday."]
+
+      assert Meetings.get_extraction!(action_point.extraction_id, "session").status ==
+               :succeeded
+    end
+
+    test "whitespace differences never fail verification" do
+      # The quote crosses the transcript's line break with a single space.
+      action_point =
+        extract_action_point(%{
+          quotes: ["the auditors need the draft first, so the numbers must be final"]
+        })
+
+      assert action_point.quotes == [
+               "the auditors need the draft first, so the numbers must be final"
+             ]
+    end
+
+    test "at most three quotes survive, whatever the Extractor returns" do
+      action_point =
+        extract_action_point(%{
+          quotes: [
+            "I'll send the Q3 report",
+            "the auditors need the draft first",
+            "final by Thursday.",
+            "Priya: I'll send the Q3 report to finance by Friday."
+          ]
+        })
+
+      assert action_point.quotes == [
+               "I'll send the Q3 report",
+               "the auditors need the draft first",
+               "final by Thursday."
+             ]
+    end
+
+    test "an Extractor result with no quotes stores an empty list" do
+      assert extract_action_point(%{}).quotes == []
+    end
+
+    test "removing a quote at Review deletes exactly that quote" do
+      action_point =
+        extract_action_point(%{
+          quotes: ["I'll send the Q3 report", "final by Thursday."]
+        })
+
+      updated = Meetings.remove_action_point_quote(action_point, 0)
+
+      assert updated.quotes == ["final by Thursday."]
     end
   end
 

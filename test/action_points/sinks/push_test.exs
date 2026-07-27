@@ -189,6 +189,98 @@ defmodule ActionPoints.Sinks.PushTest do
     assert Repo.aggregate(AssigneeMapping, :count) == 0
   end
 
+  test "quotes are rendered into the pushed description as a From the meeting section", %{
+    scope: scope
+  } do
+    extraction =
+      create_review([
+        %{
+          title: "Send the Q3 report to finance",
+          description: "Priya committed to sending the Q3 report to finance.",
+          quotes: [
+            "I'll send the Q3 report to finance by Friday.",
+            "I'll book the venue for the offsite, no rush on that one."
+          ]
+        }
+      ])
+
+    {:ok, _pushed} = Sinks.push(scope, extraction)
+
+    assert [{_, %{description: description}}] = sink_pushes()
+
+    assert description == """
+           Priya committed to sending the Q3 report to finance.
+
+           ### From the meeting
+
+           > I'll send the Q3 report to finance by Friday.
+
+           > I'll book the venue for the offsite, no rush on that one.\
+           """
+  end
+
+  test "an Action Point with no quotes pushes its prose untouched — no empty section", %{
+    scope: scope
+  } do
+    extraction =
+      create_review([
+        %{
+          title: "Send the Q3 report to finance",
+          description: "Priya committed to sending the Q3 report to finance.",
+          quotes: []
+        }
+      ])
+
+    {:ok, _pushed} = Sinks.push(scope, extraction)
+
+    assert [{_, %{description: "Priya committed to sending the Q3 report to finance."}}] =
+             sink_pushes()
+  end
+
+  test "quotes without prose push as just the From the meeting section", %{scope: scope} do
+    extraction =
+      create_review([
+        %{
+          title: "Send the Q3 report to finance",
+          description: nil,
+          quotes: ["I'll send the Q3 report to finance by Friday."]
+        }
+      ])
+
+    {:ok, _pushed} = Sinks.push(scope, extraction)
+
+    assert [{_, %{description: description}}] = sink_pushes()
+
+    assert description == """
+           ### From the meeting
+
+           > I'll send the Q3 report to finance by Friday.\
+           """
+  end
+
+  test "a quote removed at Review never reaches the sink", %{scope: scope} do
+    extraction =
+      create_review([
+        %{
+          title: "Send the Q3 report to finance",
+          description: "Priya committed to sending the Q3 report to finance.",
+          quotes: [
+            "I'll send the Q3 report to finance by Friday.",
+            "I'll book the venue for the offsite, no rush on that one."
+          ]
+        }
+      ])
+
+    [action_point] = extraction.action_points
+    Meetings.remove_action_point_quote(action_point, 1)
+
+    {:ok, _pushed} = Sinks.push(scope, extraction)
+
+    assert [{_, %{description: description}}] = sink_pushes()
+    assert description =~ "> I'll send the Q3 report to finance by Friday."
+    refute description =~ "book the venue"
+  end
+
   test "rejected Action Points are never pushed", %{scope: scope} do
     extraction = create_review(@two_action_points)
     [first, _second] = extraction.action_points
