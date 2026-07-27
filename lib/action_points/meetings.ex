@@ -36,11 +36,20 @@ defmodule ActionPoints.Meetings do
   them to the buy page), and anonymous creation is rate-limited per session
   and per IP (`{:error, :rate_limited}`, IP passed as `opts[:ip]`). Invalid
   input is reported first, so a fumbled form never burns the rate limit.
+
+  `opts[:local_date]` is the visitor's own local date as their browser reported
+  it (nil when it never arrived); the Extraction records it as its meeting date
+  with source `assumed`, falling back to the server's date.
   """
   def create_extraction(scope, session_token, attrs, opts \\ [])
       when is_binary(session_token) do
     changeset =
-      %Extraction{session_token: session_token, user_id: scope_user_id(scope)}
+      %Extraction{
+        session_token: session_token,
+        user_id: scope_user_id(scope),
+        meeting_date: assumed_meeting_date(opts),
+        meeting_date_source: :assumed
+      }
       |> Extraction.changeset(attrs)
 
     with true <- changeset.valid?,
@@ -177,17 +186,28 @@ defmodule ActionPoints.Meetings do
 
   The reset is a single conditional UPDATE, so two rapid retries can never
   start two concurrent runs.
+
+  A retry is a fresh run, so an *assumed* meeting date is recomputed from
+  `opts[:local_date]` (the retrying visitor's own local date) rather than kept
+  stale. A date derived from evidence — filename or Transcript — stays.
   """
-  def retry_extraction(%Extraction{id: id} = extraction) do
+  def retry_extraction(%Extraction{id: id} = extraction, opts \\ []) do
     with :ok <- gate_retry(extraction) do
+      reset =
+        [
+          status: :pending,
+          failure_reason: nil,
+          updated_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        ] ++
+          case extraction.meeting_date_source do
+            :assumed -> [meeting_date: assumed_meeting_date(opts)]
+            _derived -> []
+          end
+
       {reset_count, _} =
         Repo.update_all(
           from(e in Extraction, where: e.id == ^id and e.status == :failed),
-          set: [
-            status: :pending,
-            failure_reason: nil,
-            updated_at: DateTime.utc_now() |> DateTime.truncate(:second)
-          ]
+          set: reset
         )
 
       if reset_count == 1 do
@@ -199,6 +219,10 @@ defmodule ActionPoints.Meetings do
       :ok
     end
   end
+
+  # The assumed anchor, in one place: the visitor's own local date when their
+  # browser supplied it, the server's date when it didn't.
+  defp assumed_meeting_date(opts), do: opts[:local_date] || Date.utc_today()
 
   defp gate_retry(%Extraction{user_id: nil}), do: :ok
 

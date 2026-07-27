@@ -9,6 +9,7 @@ defmodule ActionPointsWeb.HomeLive do
   alias ActionPoints.Meetings
   alias ActionPoints.Meetings.Extraction
   alias ActionPoints.Meetings.Transcript
+  alias ActionPointsWeb.LocalDate
 
   # A canned product-team standup, for visitors with no transcript to hand.
   @sample_transcript """
@@ -257,6 +258,7 @@ defmodule ActionPointsWeb.HomeLive do
      socket
      |> assign(:session_token, session["anon_session_token"])
      |> assign(:peer_ip, peer_ip(socket))
+     |> assign(:local_date, LocalDate.from_connect_params(socket))
      |> assign(:rate_limited?, false)
      |> assign_form(Meetings.change_extraction(%Extraction{}))
      |> allow_upload(:transcript,
@@ -295,7 +297,8 @@ defmodule ActionPointsWeb.HomeLive do
            socket.assigns.current_scope,
            socket.assigns.session_token,
            attrs,
-           ip: socket.assigns.peer_ip
+           ip: socket.assigns.peer_ip,
+           local_date: socket.assigns.local_date
          ) do
       {:ok, extraction} ->
         Meetings.start_extraction(extraction)
