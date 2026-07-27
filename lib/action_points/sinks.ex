@@ -118,7 +118,7 @@ defmodule ActionPoints.Sinks do
     # onto the Action Point — or nothing — is exactly what Linear gets.
     task = %{
       title: action_point.title,
-      description: action_point.description,
+      description: compose_description(action_point),
       assignee_id: action_point.assignee_sink_user_id,
       due_date: action_point.due_date
     }
@@ -131,6 +131,24 @@ defmodule ActionPoints.Sinks do
 
       {:error, reason} ->
         {:error, {reason, Enum.reverse(pushed), length(rest) + 1}}
+    end
+  end
+
+  # The pushed description is the model's prose plus a "From the meeting"
+  # section of the surviving Grounding Quotes — composed here, at Push, and
+  # never stored, so the format (or the whole feature) can change without a
+  # data migration (issue #24). Each quote is its own blockquote: human
+  # speech visibly set apart from model prose. No quotes, no section.
+  defp compose_description(%{quotes: [], description: description}), do: description
+
+  defp compose_description(%{quotes: quotes, description: description}) do
+    section =
+      "### From the meeting\n\n" <> Enum.map_join(quotes, "\n\n", &("> " <> &1))
+
+    case description do
+      nil -> section
+      "" -> section
+      prose -> prose <> "\n\n" <> section
     end
   end
 

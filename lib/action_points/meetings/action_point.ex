@@ -15,6 +15,11 @@ defmodule ActionPoints.Meetings.ActionPoint do
     field :due_date, :date
     field :status, Ecto.Enum, values: [:accepted, :rejected], default: :accepted
 
+    # Grounding Quotes: verbatim Transcript excerpts, verified when the
+    # Extraction finalised. Removable at Review but never editable — an
+    # edited quote is no longer evidence — so no curation cast touches this.
+    field :quotes, {:array, :string}, default: []
+
     # The assignee guess resolved to a real Task Sink member (ADR-0007):
     # `assignee_resolution` is nil until Review has looked at this row once,
     # and stays whatever it settled on after that — a later Review reopening
@@ -46,7 +51,7 @@ defmodule ActionPoints.Meetings.ActionPoint do
 
   def changeset(action_point, attrs) do
     action_point
-    |> cast(attrs, [:title, :description, :assignee_guess, :due_date])
+    |> cast(attrs, [:title, :description, :assignee_guess, :due_date, :quotes])
     |> validate_required([:title])
   end
 

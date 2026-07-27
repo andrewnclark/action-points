@@ -11,7 +11,11 @@ defmodule ActionPoints.Meetings.Extractor do
           required(:title) => String.t(),
           required(:description) => String.t() | nil,
           required(:assignee_guess) => String.t() | nil,
-          required(:due_date) => Date.t() | nil
+          required(:due_date) => Date.t() | nil,
+          # Up to three candidate Grounding Quotes — claimed verbatim by the
+          # model, verified against the Transcript only when the Extraction
+          # finalises.
+          required(:quotes) => [String.t()]
         }
 
   @callback extract(transcript_text :: String.t()) ::

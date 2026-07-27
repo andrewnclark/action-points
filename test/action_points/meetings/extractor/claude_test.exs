@@ -40,7 +40,8 @@ defmodule ActionPoints.Meetings.Extractor.ClaudeTest do
                     "title" => "Send the Q3 report",
                     "description" => "Priya will send the Q3 report.",
                     "assignee_guess" => "Priya",
-                    "due_date" => "2026-07-31"
+                    "due_date" => "2026-07-31",
+                    "quotes" => ["I'll send the Q3 report by July 31st 2026."]
                   },
                   %{
                     "title" => "Circle back on hiring",
@@ -61,11 +62,16 @@ defmodule ActionPoints.Meetings.Extractor.ClaudeTest do
              title: "Send the Q3 report",
              description: "Priya will send the Q3 report.",
              assignee_guess: "Priya",
-             due_date: ~D[2026-07-31]
+             due_date: ~D[2026-07-31],
+             quotes: ["I'll send the Q3 report by July 31st 2026."]
            }
 
     assert second.assignee_guess == nil
     assert second.due_date == nil
+
+    # The schema demands quotes, but a missing key parses as none — quote
+    # trouble must never cost the user their Action Points.
+    assert second.quotes == []
   end
 
   test "a refusal is a typed failure" do
