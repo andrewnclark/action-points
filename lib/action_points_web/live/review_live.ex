@@ -306,6 +306,46 @@ defmodule ActionPointsWeb.ReviewLive do
                   >
                     {action_point.description}
                   </p>
+                  <%!-- Grounding Quotes: verified human speech, visibly set
+                  apart from the model's prose and collapsed so the Review
+                  stays scannable. Removable, never editable — an edited
+                  quote would no longer be evidence. --%>
+                  <details
+                    :if={action_point.quotes != []}
+                    id={"#{dom_id}-quotes"}
+                    data-role="grounding-quotes"
+                    class="mt-2"
+                  >
+                    <summary class="cursor-pointer text-xs text-base-content/65 select-none hover:text-base-content/80">
+                      From the meeting · {ngettext(
+                        "1 quote",
+                        "%{count} quotes",
+                        length(action_point.quotes)
+                      )}
+                    </summary>
+                    <ul class="mt-2 space-y-2">
+                      <li
+                        :for={{quote, index} <- Enum.with_index(action_point.quotes)}
+                        class="flex items-start gap-2"
+                      >
+                        <blockquote class="flex-1 border-l-2 border-base-300 pl-3 text-base-content/70 italic">
+                          {quote}
+                        </blockquote>
+                        <button
+                          :if={is_nil(action_point.sink_issue_id)}
+                          id={"#{dom_id}-quote-#{index}-remove"}
+                          phx-click="remove_quote"
+                          phx-value-id={action_point.id}
+                          phx-value-index={index}
+                          class="btn btn-ghost btn-xs"
+                          title="Remove this quote"
+                          aria-label="Remove this quote"
+                        >
+                          <.icon name="hero-x-mark-micro" class="size-3.5" />
+                        </button>
+                      </li>
+                    </ul>
+                  </details>
                   <div class="mt-3 flex flex-wrap items-center gap-1.5">
                     <.assignee_field
                       action_point={action_point}
@@ -523,6 +563,15 @@ defmodule ActionPointsWeb.ReviewLive do
 
   def handle_event("accept", %{"id" => id}, socket) do
     {:noreply, set_status(socket, id, :accepted)}
+  end
+
+  def handle_event("remove_quote", %{"id" => id, "index" => index}, socket) do
+    action_point =
+      id
+      |> Meetings.get_action_point!(socket.assigns.extraction.session_token)
+      |> Meetings.remove_action_point_quote(String.to_integer(index))
+
+    {:noreply, refresh_action_point(socket, action_point)}
   end
 
   def handle_event("edit", %{"id" => id}, socket) do
