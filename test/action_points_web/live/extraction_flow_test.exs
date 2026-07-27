@@ -196,6 +196,34 @@ defmodule ActionPointsWeb.ExtractionFlowTest do
     assert has_element?(review, "#meeting-date", "from the filename")
   end
 
+  test "a date stated in the Transcript anchors the meeting date, and Review says so",
+       %{conn: conn} do
+    stub_extractor(
+      {:ok,
+       %{
+         meeting_date: ~D[2026-05-04],
+         action_points: [
+           %{title: "Send the Q3 report to finance", description: nil, assignee_guess: nil}
+         ]
+       }}
+    )
+
+    conn = conn |> get(~p"/") |> put_connect_params(%{"local_date" => "2026-07-26"})
+    {:ok, home, _html} = live(conn)
+
+    result =
+      home
+      |> form("#transcript-form", extraction: %{transcript_text: @transcript})
+      |> render_submit()
+
+    {:ok, review, _html} = follow_redirect(result, conn)
+
+    eventually(fn ->
+      assert has_element?(review, "#meeting-date", "Mon 4 May")
+      assert has_element?(review, "#meeting-date", "stated in the Transcript")
+    end)
+  end
+
   test "an over-cap transcript is rejected with a clear message, pre-Extraction", %{conn: conn} do
     conn = get(conn, ~p"/")
     {:ok, home, _html} = live(conn)

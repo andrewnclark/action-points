@@ -32,6 +32,14 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
     silently discarded. Prefer one or two quotes that carry a decision,
     constraint, or commitment over three weak ones; an empty list is fine.
 
+  Alongside the Action Points, report meeting_date: the date this meeting
+  itself took place, as an ISO 8601 date, but only when the transcript states
+  it outright — a header line such as "Date: 4 May 2026", or a speaker saying
+  what today's date is. A date merely mentioned in the conversation is not the
+  meeting's own date: "the board meets on the 3rd" and "we shipped it on the
+  12th" are both null. When nothing states when this meeting happened, report
+  null rather than guessing.
+
   Include vague or tentative commitments ("we should probably look into
   that") as their own Action Points — the user rejects noise during Review,
   so it is better to surface a doubtful item than to silently drop it.
@@ -41,6 +49,9 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
   @output_schema %{
     "type" => "object",
     "properties" => %{
+      "meeting_date" => %{
+        "anyOf" => [%{"type" => "string", "format" => "date"}, %{"type" => "null"}]
+      },
       "action_points" => %{
         "type" => "array",
         "items" => %{
@@ -63,7 +74,7 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
         }
       }
     },
-    "required" => ["action_points"],
+    "required" => ["meeting_date", "action_points"],
     "additionalProperties" => false
   }
 
@@ -106,8 +117,12 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
   defp parse_response(%{"content" => content}) do
     # Adaptive thinking may put a thinking block before the text block.
     with %{"text" => text} <- Enum.find(content, %{}, &(&1["type"] == "text")),
-         {:ok, %{"action_points" => action_points}} <- Jason.decode(text) do
-      {:ok, Enum.map(action_points, &to_attrs/1)}
+         {:ok, %{"action_points" => action_points} = decoded} <- Jason.decode(text) do
+      {:ok,
+       %{
+         action_points: Enum.map(action_points, &to_attrs/1),
+         meeting_date: parse_date(decoded["meeting_date"])
+       }}
     else
       _ -> {:error, :invalid_response}
     end
@@ -125,14 +140,18 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
     }
   end
 
-  defp parse_date(nil), do: nil
-
-  defp parse_date(iso8601) do
+  # Used for both the meeting date and each Action Point's due date. Anything
+  # the schema should have prevented — a missing key, a phrase like "last
+  # Tuesday", a number — reads as no date rather than as a failed Extraction: a
+  # malformed date must never cost the user their Action Points.
+  defp parse_date(iso8601) when is_binary(iso8601) do
     case Date.from_iso8601(iso8601) do
       {:ok, date} -> date
       {:error, _} -> nil
     end
   end
+
+  defp parse_date(_), do: nil
 
   defp config do
     Application.get_env(:action_points, __MODULE__, [])

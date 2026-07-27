@@ -1,6 +1,7 @@
 defmodule ActionPointsWeb.PushTest do
   use ActionPointsWeb.ConnCase, async: false
 
+  import ActionPoints.ExtractionHelpers
   import Phoenix.LiveViewTest
 
   alias ActionPoints.Meetings
@@ -42,7 +43,7 @@ defmodule ActionPointsWeb.PushTest do
   # Creates a succeeded Extraction owned by the conn's anonymous session and
   # opens its Review screen.
   defp open_review(conn) do
-    Application.put_env(:action_points, :fake_extractor_result, @extractor_result)
+    stub_extractor(@extractor_result)
 
     conn = get(conn, ~p"/")
     session_token = Plug.Conn.get_session(conn, :anon_session_token)
