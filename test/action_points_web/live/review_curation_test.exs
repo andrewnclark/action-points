@@ -1,6 +1,7 @@
 defmodule ActionPointsWeb.ReviewCurationTest do
   use ActionPointsWeb.ConnCase, async: false
 
+  import ActionPoints.ExtractionHelpers
   import Phoenix.LiveViewTest
 
   alias ActionPoints.Meetings
@@ -30,8 +31,7 @@ defmodule ActionPointsWeb.ReviewCurationTest do
   # opens its Review screen. The Extraction runs synchronously here so the
   # curation tests start from a settled Review, not a spinner.
   defp open_review(conn, result \\ @extractor_result) do
-    Application.put_env(:action_points, :fake_extractor_result, result)
-    on_exit(fn -> Application.delete_env(:action_points, :fake_extractor_result) end)
+    stub_extractor(result)
 
     conn = get(conn, ~p"/")
     session_token = Plug.Conn.get_session(conn, :anon_session_token)

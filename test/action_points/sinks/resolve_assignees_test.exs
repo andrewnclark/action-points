@@ -1,6 +1,8 @@
 defmodule ActionPoints.Sinks.ResolveAssigneesTest do
   use ActionPoints.DataCase, async: false
 
+  import ActionPoints.ExtractionHelpers
+
   alias ActionPoints.Accounts.Scope
   alias ActionPoints.AccountsFixtures
   alias ActionPoints.Meetings
@@ -33,7 +35,7 @@ defmodule ActionPoints.Sinks.ResolveAssigneesTest do
   end
 
   defp action_points(attrs_list) do
-    Application.put_env(:action_points, :fake_extractor_result, {:ok, attrs_list})
+    stub_extractor({:ok, attrs_list})
 
     {:ok, extraction} =
       Meetings.create_extraction(nil, @session_token, %{"transcript_text" => @transcript})

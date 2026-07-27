@@ -1,6 +1,8 @@
 defmodule ActionPoints.Sinks.PushTest do
   use ActionPoints.DataCase, async: false
 
+  import ActionPoints.ExtractionHelpers
+
   alias ActionPoints.Accounts.Scope
   alias ActionPoints.AccountsFixtures
   alias ActionPoints.Meetings
@@ -53,7 +55,7 @@ defmodule ActionPoints.Sinks.PushTest do
 
   # Creates a succeeded Extraction whose Review the tests push from.
   defp create_review(action_points) do
-    Application.put_env(:action_points, :fake_extractor_result, {:ok, action_points})
+    stub_extractor({:ok, action_points})
 
     {:ok, extraction} =
       Meetings.create_extraction(nil, @session_token, %{"transcript_text" => @transcript})

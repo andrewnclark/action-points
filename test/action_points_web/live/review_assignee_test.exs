@@ -1,6 +1,7 @@
 defmodule ActionPointsWeb.ReviewAssigneeTest do
   use ActionPointsWeb.ConnCase, async: false
 
+  import ActionPoints.ExtractionHelpers
   import Phoenix.LiveViewTest
 
   alias ActionPoints.Meetings
@@ -37,7 +38,7 @@ defmodule ActionPointsWeb.ReviewAssigneeTest do
   # Extraction itself runs anonymously (matching ActionPoints.Sinks.PushTest's
   # pattern) — Push and Review both key off the session token, not ownership.
   defp open_review(conn, action_points) do
-    Application.put_env(:action_points, :fake_extractor_result, {:ok, action_points})
+    stub_extractor({:ok, action_points})
 
     conn = get(conn, ~p"/")
     session_token = Plug.Conn.get_session(conn, :anon_session_token)
