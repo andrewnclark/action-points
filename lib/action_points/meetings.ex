@@ -14,6 +14,7 @@ defmodule ActionPoints.Meetings do
   alias ActionPoints.Billing
   alias ActionPoints.Meetings.ActionPoint
   alias ActionPoints.Meetings.Extraction
+  alias ActionPoints.Meetings.GroundingQuote
   alias ActionPoints.RateLimiter
   alias ActionPoints.Repo
 
@@ -237,7 +238,7 @@ defmodule ActionPoints.Meetings do
         |> Enum.with_index(1)
         |> Enum.each(fn {attrs, position} ->
           %ActionPoint{extraction_id: extraction.id, position: position}
-          |> ActionPoint.changeset(attrs)
+          |> ActionPoint.changeset(verify_quotes(attrs, extraction))
           |> Repo.insert!()
         end)
 
@@ -253,6 +254,14 @@ defmodule ActionPoints.Meetings do
 
     broadcast(extraction)
     extraction
+  end
+
+  # Grounding Quotes are verified the moment the Extraction finalises: only
+  # quotes that really appear in the normalised Transcript are stored, so a
+  # hallucinated one never exists anywhere downstream (issue #24).
+  defp verify_quotes(attrs, extraction) do
+    quotes = GroundingQuote.verify(Map.get(attrs, :quotes, []), extraction.transcript_text)
+    Map.put(attrs, :quotes, quotes)
   end
 
   defp finalize_failure(extraction, reason) do
@@ -307,6 +316,19 @@ defmodule ActionPoints.Meetings do
     action_point
     |> ActionPoint.curation_changeset(attrs)
     |> Repo.update()
+  end
+
+  @doc """
+  Removes one Grounding Quote (by its position in the list) from an Action
+  Point during Review — how an off-record remark is kept out of the Task
+  Sink. Removal is the only curation quotes allow: an edited quote would no
+  longer be evidence.
+  """
+  def remove_action_point_quote(%ActionPoint{} = action_point, index)
+      when is_integer(index) and index >= 0 do
+    action_point
+    |> Ecto.Changeset.change(quotes: List.delete_at(action_point.quotes, index))
+    |> Repo.update!()
   end
 
   @doc """

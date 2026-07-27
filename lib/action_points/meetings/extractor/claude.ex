@@ -15,13 +15,22 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
   An Action Point is a task somebody committed to or proposed in the meeting.
   For each one produce:
   - title: a short imperative task title
-  - description: enough context from the conversation that the task is
-    actionable on its own
+  - description: the context that makes the task actionable days later, for
+    a reader who was not in the meeting: why the task exists, the decisions
+    the meeting took about it, and the constraints or concerns raised. Never
+    a restatement of the title — if the conversation gave nothing beyond the
+    task itself, keep the description short rather than padding it
   - assignee_guess: the person responsible, grounded in the speaker labels
     when the transcript has them; null when nobody was clearly responsible
   - due_date: an ISO 8601 date, only when a date was actually said aloud
     (resolve relative dates against the transcript's context if possible,
     otherwise leave null); never invent one
+  - quotes: up to three short verbatim excerpts from the transcript — the
+    decision-bearing words actually spoken about this task. Copy them
+    character for character from the transcript; every quote is checked
+    against it and a paraphrase, trimmed filler, or corrected typo is
+    silently discarded. Prefer one or two quotes that carry a decision,
+    constraint, or commitment over three weak ones; an empty list is fine.
 
   Include vague or tentative commitments ("we should probably look into
   that") as their own Action Points — the user rejects noise during Review,
@@ -42,9 +51,14 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
             "assignee_guess" => %{"anyOf" => [%{"type" => "string"}, %{"type" => "null"}]},
             "due_date" => %{
               "anyOf" => [%{"type" => "string", "format" => "date"}, %{"type" => "null"}]
+            },
+            "quotes" => %{
+              "type" => "array",
+              "items" => %{"type" => "string"},
+              "maxItems" => ActionPoints.Meetings.GroundingQuote.max_quotes()
             }
           },
-          "required" => ["title", "description", "assignee_guess", "due_date"],
+          "required" => ["title", "description", "assignee_guess", "due_date", "quotes"],
           "additionalProperties" => false
         }
       }
@@ -106,7 +120,8 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
       title: action_point["title"],
       description: action_point["description"],
       assignee_guess: action_point["assignee_guess"],
-      due_date: parse_date(action_point["due_date"])
+      due_date: parse_date(action_point["due_date"]),
+      quotes: action_point["quotes"] || []
     }
   end
 
