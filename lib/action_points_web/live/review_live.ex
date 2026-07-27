@@ -9,6 +9,7 @@ defmodule ActionPointsWeb.ReviewLive do
   alias ActionPoints.Billing
   alias ActionPoints.Meetings
   alias ActionPoints.Sinks
+  alias ActionPointsWeb.LocalDate
 
   @impl true
   def render(assigns) do
@@ -91,6 +92,15 @@ defmodule ActionPointsWeb.ReviewLive do
                   "%{count} Action Points extracted from your Transcript.",
                   @action_point_count
                 )}
+              </p>
+              <%!-- The anchor, stated where the dates it produced are read: any
+              resolved date traces back to what it was counted from. --%>
+              <p id="meeting-date" class="mt-1.5 text-xs text-base-content/65">
+                Deadlines resolved relative to
+                <span class="font-medium text-base-content/80">
+                  {Calendar.strftime(@extraction.meeting_date, "%a %-d %b")}
+                </span>
+                ({meeting_date_source_label(@extraction.meeting_date_source)})
               </p>
             </div>
 
@@ -553,7 +563,10 @@ defmodule ActionPointsWeb.ReviewLive do
 
     extraction = Meetings.get_extraction!(id, session["anon_session_token"])
 
-    {:ok, assign_resolved_extraction(socket, connected?(socket), extraction)}
+    {:ok,
+     socket
+     |> assign(:local_date, LocalDate.from_connect_params(socket))
+     |> assign_resolved_extraction(connected?(socket), extraction)}
   end
 
   @impl true
@@ -655,7 +668,11 @@ defmodule ActionPointsWeb.ReviewLive do
   end
 
   def handle_event("retry", _params, socket) do
-    case Meetings.retry_extraction(socket.assigns.extraction) do
+    # A retry is a fresh run: it re-anchors an assumed meeting date to the
+    # retrying visitor's own local date.
+    case Meetings.retry_extraction(socket.assigns.extraction,
+           local_date: socket.assigns.local_date
+         ) do
       :ok ->
         {:noreply, assign_extraction(socket, refetch_extraction(socket))}
 
@@ -850,6 +867,12 @@ defmodule ActionPointsWeb.ReviewLive do
 
   defp failure_reason(_reason),
     do: "Something went wrong on our side. This is usually temporary — run it again."
+
+  # Where the anchor came from, in the reader's terms — `assumed` says plainly
+  # that nothing in the upload or the Transcript stated a date.
+  defp meeting_date_source_label(:filename), do: "from the filename"
+  defp meeting_date_source_label(:transcript), do: "stated in the Transcript"
+  defp meeting_date_source_label(:assumed), do: "assumed"
 
   defp push_failure_reason(:invalid_key),
     do: "Linear rejected the connected API key — check it in settings."

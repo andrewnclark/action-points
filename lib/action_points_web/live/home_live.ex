@@ -9,6 +9,7 @@ defmodule ActionPointsWeb.HomeLive do
   alias ActionPoints.Meetings
   alias ActionPoints.Meetings.Extraction
   alias ActionPoints.Meetings.Transcript
+  alias ActionPointsWeb.LocalDate
 
   # A canned product-team standup, for visitors with no transcript to hand.
   @sample_transcript """
@@ -257,6 +258,7 @@ defmodule ActionPointsWeb.HomeLive do
      socket
      |> assign(:session_token, session["anon_session_token"])
      |> assign(:peer_ip, peer_ip(socket))
+     |> assign(:local_date, LocalDate.from_connect_params(socket))
      |> assign(:rate_limited?, false)
      |> assign_form(Meetings.change_extraction(%Extraction{}))
      |> allow_upload(:transcript,
@@ -278,24 +280,27 @@ defmodule ActionPointsWeb.HomeLive do
   end
 
   def handle_event("extract", %{"extraction" => params}, socket) do
-    # An uploaded file takes precedence over anything left in the textarea.
-    attrs = consume_transcript_upload(socket) || params
+    # An uploaded file takes precedence over anything left in the textarea, and
+    # brings its own name along — the name is where the meeting date lives.
+    {attrs, filename} = consume_transcript_upload(socket) || {params, nil}
 
-    start_extraction(socket, attrs)
+    start_extraction(socket, attrs, filename)
   end
 
   def handle_event("load_sample", _params, socket) do
     start_extraction(socket, %{"transcript_text" => @sample_transcript})
   end
 
-  defp start_extraction(socket, attrs) do
+  defp start_extraction(socket, attrs, filename \\ nil) do
     socket = assign(socket, :rate_limited?, false)
 
     case Meetings.create_extraction(
            socket.assigns.current_scope,
            socket.assigns.session_token,
            attrs,
-           ip: socket.assigns.peer_ip
+           ip: socket.assigns.peer_ip,
+           local_date: socket.assigns.local_date,
+           filename: filename
          ) do
       {:ok, extraction} ->
         Meetings.start_extraction(extraction)
@@ -319,10 +324,10 @@ defmodule ActionPointsWeb.HomeLive do
     socket
     |> consume_uploaded_entries(:transcript, fn %{path: path}, entry ->
       {:ok,
-       %{
-         "transcript_text" => File.read!(path),
-         "source_format" => Transcript.format_from_filename(entry.client_name)
-       }}
+       {%{
+          "transcript_text" => File.read!(path),
+          "source_format" => Transcript.format_from_filename(entry.client_name)
+        }, entry.client_name}}
     end)
     |> List.first()
   end
