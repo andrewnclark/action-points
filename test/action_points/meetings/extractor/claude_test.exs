@@ -35,6 +35,7 @@ defmodule ActionPoints.Meetings.Extractor.ClaudeTest do
             "type" => "text",
             "text" =>
               Jason.encode!(%{
+                "meeting_date" => "2026-07-24",
                 "action_points" => [
                   %{
                     "title" => "Send the Q3 report",
@@ -56,7 +57,8 @@ defmodule ActionPoints.Meetings.Extractor.ClaudeTest do
       })
     end)
 
-    assert {:ok, [first, second]} = Claude.extract(@transcript)
+    assert {:ok, %{meeting_date: ~D[2026-07-24], action_points: [first, second]}} =
+             Claude.extract(@transcript)
 
     assert first == %{
              title: "Send the Q3 report",
@@ -72,6 +74,50 @@ defmodule ActionPoints.Meetings.Extractor.ClaudeTest do
     # The schema demands quotes, but a missing key parses as none — quote
     # trouble must never cost the user their Action Points.
     assert second.quotes == []
+  end
+
+  test "a response stating no meeting date parses as none" do
+    stub_response(fn conn ->
+      Req.Test.json(conn, %{
+        "stop_reason" => "end_turn",
+        "content" => [
+          %{
+            "type" => "text",
+            "text" =>
+              Jason.encode!(%{
+                "meeting_date" => nil,
+                "action_points" => [
+                  %{
+                    "title" => "Send the Q3 report",
+                    "description" => "Priya will send the Q3 report.",
+                    "assignee_guess" => "Priya",
+                    "due_date" => nil,
+                    "quotes" => []
+                  }
+                ]
+              })
+          }
+        ]
+      })
+    end)
+
+    assert {:ok, %{meeting_date: nil, action_points: [_one]}} = Claude.extract(@transcript)
+  end
+
+  test "a meeting date the schema should have prevented is none, not a failed Extraction" do
+    for payload <- [
+          %{"meeting_date" => "last Tuesday", "action_points" => []},
+          %{"action_points" => []}
+        ] do
+      stub_response(fn conn ->
+        Req.Test.json(conn, %{
+          "stop_reason" => "end_turn",
+          "content" => [%{"type" => "text", "text" => Jason.encode!(payload)}]
+        })
+      end)
+
+      assert {:ok, %{meeting_date: nil, action_points: []}} = Claude.extract(@transcript)
+    end
   end
 
   test "a refusal is a typed failure" do
