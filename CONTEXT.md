@@ -38,6 +38,10 @@ _Avoid_: preview, free preview, trial
 A remembered link from a guessed name to one Task Sink user, scoped to a Sink Connection (it dies with the connection). Born during Review the first time a name is resolved; thereafter that name resolves automatically. Push assigns only what Review resolved — nothing is matched silently at Push.
 _Avoid_: user sync, alias, name matching
 
+**Meeting Date**:
+The day the meeting happened, recorded on the Extraction and stated at Review. Every relative deadline ("by Friday") resolves against it. Taken from the best evidence available — a date stated in the Transcript, then an unambiguous date in the uploaded filename — and otherwise assumed to be the visitor's own local date.
+_Avoid_: date, timestamp, upload date (the upload date is only ever the assumed fallback)
+
 **Grounding Quote**:
 A short verbatim excerpt from the Transcript attached to an Action Point as evidence, verified to actually appear in the Transcript. Travels with the Action Point into the Task Sink.
 _Avoid_: citation, snippet, source
