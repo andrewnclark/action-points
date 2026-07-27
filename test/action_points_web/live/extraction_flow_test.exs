@@ -167,6 +167,35 @@ defmodule ActionPointsWeb.ExtractionFlowTest do
     assert extraction.transcript_text =~ "Priya Sharma: I'll send the Q3 report"
   end
 
+  test "a dated export filename anchors the meeting date, and Review says so", %{conn: conn} do
+    stub_extractor(
+      {:ok, [%{title: "Send the Q3 report to finance", description: nil, assignee_guess: nil}]}
+    )
+
+    conn = get(conn, ~p"/")
+    {:ok, home, _html} = live(conn)
+
+    home
+    |> file_input("#transcript-form", :transcript, [
+      %{
+        name: "GMT20260312-140000_Recording.transcript.txt",
+        content: "Priya Sharma: I'll send the Q3 report to finance by Friday.",
+        type: "text/plain"
+      }
+    ])
+    |> render_upload("GMT20260312-140000_Recording.transcript.txt")
+
+    result =
+      home
+      |> form("#transcript-form", extraction: %{transcript_text: ""})
+      |> render_submit()
+
+    {:ok, review, _html} = follow_redirect(result, conn)
+
+    assert has_element?(review, "#meeting-date", "Thu 12 Mar")
+    assert has_element?(review, "#meeting-date", "from the filename")
+  end
+
   test "an over-cap transcript is rejected with a clear message, pre-Extraction", %{conn: conn} do
     conn = get(conn, ~p"/")
     {:ok, home, _html} = live(conn)
