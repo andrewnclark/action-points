@@ -63,11 +63,11 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
             "due_date" => %{
               "anyOf" => [%{"type" => "string", "format" => "date"}, %{"type" => "null"}]
             },
-            "quotes" => %{
-              "type" => "array",
-              "items" => %{"type" => "string"},
-              "maxItems" => ActionPoints.Meetings.GroundingQuote.max_quotes()
-            }
+            # No `maxItems`: structured outputs reject it outright ("For
+            # 'array' type, property 'maxItems' is not supported"), failing the
+            # whole request. The cap is the prompt's to ask for and
+            # `GroundingQuote.verify/2`'s to enforce.
+            "quotes" => %{"type" => "array", "items" => %{"type" => "string"}}
           },
           "required" => ["title", "description", "assignee_guess", "due_date", "quotes"],
           "additionalProperties" => false
