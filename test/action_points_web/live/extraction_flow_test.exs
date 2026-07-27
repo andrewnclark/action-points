@@ -167,6 +167,35 @@ defmodule ActionPointsWeb.ExtractionFlowTest do
     assert extraction.transcript_text =~ "Priya Sharma: I'll send the Q3 report"
   end
 
+  test "a dated export filename anchors the meeting date, and Review says so", %{conn: conn} do
+    stub_extractor(
+      {:ok, [%{title: "Send the Q3 report to finance", description: nil, assignee_guess: nil}]}
+    )
+
+    conn = get(conn, ~p"/")
+    {:ok, home, _html} = live(conn)
+
+    home
+    |> file_input("#transcript-form", :transcript, [
+      %{
+        name: "GMT20260312-140000_Recording.transcript.txt",
+        content: "Priya Sharma: I'll send the Q3 report to finance by Friday.",
+        type: "text/plain"
+      }
+    ])
+    |> render_upload("GMT20260312-140000_Recording.transcript.txt")
+
+    result =
+      home
+      |> form("#transcript-form", extraction: %{transcript_text: ""})
+      |> render_submit()
+
+    {:ok, review, _html} = follow_redirect(result, conn)
+
+    assert has_element?(review, "#meeting-date", "Thu 12 Mar")
+    assert has_element?(review, "#meeting-date", "from the filename")
+  end
+
   test "an over-cap transcript is rejected with a clear message, pre-Extraction", %{conn: conn} do
     conn = get(conn, ~p"/")
     {:ok, home, _html} = live(conn)
@@ -203,6 +232,79 @@ defmodule ActionPointsWeb.ExtractionFlowTest do
 
     assert has_element?(home, "#transcript-form", "can't be blank")
     assert ActionPoints.Repo.aggregate(ActionPoints.Meetings.Extraction, :count) == 0
+  end
+
+  test "the Review says which date deadlines resolve against, from the browser's local date",
+       %{conn: conn} do
+    stub_extractor(
+      {:ok,
+       [
+         %{
+           title: "Send the Q3 report to finance",
+           description: nil,
+           assignee_guess: nil,
+           due_date: nil
+         }
+       ]}
+    )
+
+    conn = conn |> get(~p"/") |> put_connect_params(%{"local_date" => "2026-07-26"})
+    {:ok, home, _html} = live(conn)
+
+    result =
+      home
+      |> form("#transcript-form", extraction: %{transcript_text: @transcript})
+      |> render_submit()
+
+    {:ok, review, _html} = follow_redirect(result, conn)
+
+    extraction = ActionPoints.Repo.one!(ActionPoints.Meetings.Extraction)
+    assert extraction.meeting_date == ~D[2026-07-26]
+    assert extraction.meeting_date_source == :assumed
+
+    eventually(fn ->
+      assert has_element?(review, "#meeting-date", "Deadlines resolved relative to Sun 26 Jul")
+      assert has_element?(review, "#meeting-date", "(assumed)")
+    end)
+  end
+
+  test "a browser date that isn't a date falls back to the server's own", %{conn: conn} do
+    stub_extractor({:ok, []})
+
+    conn = conn |> get(~p"/") |> put_connect_params(%{"local_date" => "sometime today"})
+    {:ok, home, _html} = live(conn)
+
+    result =
+      home
+      |> form("#transcript-form", extraction: %{transcript_text: @transcript})
+      |> render_submit()
+
+    {:ok, review, _html} = follow_redirect(result, conn)
+    eventually(fn -> assert has_element?(review, "#review-empty") end)
+
+    extraction = ActionPoints.Repo.one!(ActionPoints.Meetings.Extraction)
+    assert extraction.meeting_date == Date.utc_today()
+    assert extraction.meeting_date_source == :assumed
+  end
+
+  test "an Extraction started without connect params still records a meeting date",
+       %{conn: conn} do
+    stub_extractor({:ok, []})
+
+    conn = get(conn, ~p"/")
+    {:ok, home, _html} = live(conn)
+
+    result =
+      home
+      |> form("#transcript-form", extraction: %{transcript_text: @transcript})
+      |> render_submit()
+
+    {:ok, review, _html} = follow_redirect(result, conn)
+    eventually(fn -> assert has_element?(review, "#review-empty") end)
+
+    extraction = ActionPoints.Repo.one!(ActionPoints.Meetings.Extraction)
+    assert extraction.meeting_date == Date.utc_today()
+    assert extraction.meeting_date_source == :assumed
   end
 
   test "an Extraction is not visible to a different anonymous session", %{conn: conn} do

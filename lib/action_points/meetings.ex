@@ -15,6 +15,7 @@ defmodule ActionPoints.Meetings do
   alias ActionPoints.Meetings.ActionPoint
   alias ActionPoints.Meetings.Extraction
   alias ActionPoints.Meetings.GroundingQuote
+  alias ActionPoints.Meetings.Transcript
   alias ActionPoints.RateLimiter
   alias ActionPoints.Repo
 
@@ -36,11 +37,23 @@ defmodule ActionPoints.Meetings do
   them to the buy page), and anonymous creation is rate-limited per session
   and per IP (`{:error, :rate_limited}`, IP passed as `opts[:ip]`). Invalid
   input is reported first, so a fumbled form never burns the rate limit.
+
+  The meeting date is settled here, best evidence first: an unambiguous date in
+  `opts[:filename]` (the uploaded file's own name), then `opts[:local_date]` —
+  the visitor's own local date as their browser reported it — and finally the
+  server's date when neither arrived.
   """
   def create_extraction(scope, session_token, attrs, opts \\ [])
       when is_binary(session_token) do
+    {meeting_date, meeting_date_source} = settle_meeting_date(opts)
+
     changeset =
-      %Extraction{session_token: session_token, user_id: scope_user_id(scope)}
+      %Extraction{
+        session_token: session_token,
+        user_id: scope_user_id(scope),
+        meeting_date: meeting_date,
+        meeting_date_source: meeting_date_source
+      }
       |> Extraction.changeset(attrs)
 
     with true <- changeset.valid?,
@@ -177,17 +190,28 @@ defmodule ActionPoints.Meetings do
 
   The reset is a single conditional UPDATE, so two rapid retries can never
   start two concurrent runs.
+
+  A retry is a fresh run, so an *assumed* meeting date is recomputed from
+  `opts[:local_date]` (the retrying visitor's own local date) rather than kept
+  stale. A date derived from evidence — filename or Transcript — stays.
   """
-  def retry_extraction(%Extraction{id: id} = extraction) do
+  def retry_extraction(%Extraction{id: id} = extraction, opts \\ []) do
     with :ok <- gate_retry(extraction) do
+      reset =
+        [
+          status: :pending,
+          failure_reason: nil,
+          updated_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        ] ++
+          case extraction.meeting_date_source do
+            :assumed -> [meeting_date: assumed_meeting_date(opts)]
+            _derived -> []
+          end
+
       {reset_count, _} =
         Repo.update_all(
           from(e in Extraction, where: e.id == ^id and e.status == :failed),
-          set: [
-            status: :pending,
-            failure_reason: nil,
-            updated_at: DateTime.utc_now() |> DateTime.truncate(:second)
-          ]
+          set: reset
         )
 
       if reset_count == 1 do
@@ -199,6 +223,20 @@ defmodule ActionPoints.Meetings do
       :ok
     end
   end
+
+  # The anchor and where it came from, in one place. A filename date is
+  # evidence about the meeting itself, so it outranks the date the visitor
+  # happens to be uploading on.
+  defp settle_meeting_date(opts) do
+    case opts[:filename] && Transcript.date_from_filename(opts[:filename]) do
+      %Date{} = date -> {date, :filename}
+      _none -> {assumed_meeting_date(opts), :assumed}
+    end
+  end
+
+  # The assumed anchor: the visitor's own local date when their browser
+  # supplied it, the server's date when it didn't.
+  defp assumed_meeting_date(opts), do: opts[:local_date] || Date.utc_today()
 
   defp gate_retry(%Extraction{user_id: nil}), do: :ok
 
