@@ -149,6 +149,47 @@ defmodule ActionPoints.MeetingsTest do
       assert extraction.meeting_date_source == :assumed
     end
 
+    test "a dated upload filename wins over the visitor's local date" do
+      {:ok, extraction} =
+        Meetings.create_extraction(nil, "session", %{"transcript_text" => @transcript},
+          local_date: ~D[2026-07-20],
+          filename: "GMT20260312-140000_Recording.transcript.vtt"
+        )
+
+      assert extraction.meeting_date == ~D[2026-03-12]
+      assert extraction.meeting_date_source == :filename
+    end
+
+    test "a filename carrying no readable date falls through to the local date" do
+      {:ok, extraction} =
+        Meetings.create_extraction(nil, "session", %{"transcript_text" => @transcript},
+          local_date: ~D[2026-07-20],
+          filename: "team standup 12-03-2026.vtt"
+        )
+
+      assert extraction.meeting_date == ~D[2026-07-20]
+      assert extraction.meeting_date_source == :assumed
+    end
+
+    test "a retry keeps a meeting date derived from the filename" do
+      stub_extractor({:error, :api_unavailable})
+
+      {:ok, extraction} =
+        Meetings.create_extraction(nil, "session", %{"transcript_text" => @transcript},
+          local_date: ~D[2026-07-20],
+          filename: "GMT20260312-140000_Recording.transcript.vtt"
+        )
+
+      Meetings.run_extraction(extraction)
+
+      extraction = Meetings.get_extraction!(extraction.id, "session")
+      :ok = Meetings.retry_extraction(extraction, local_date: ~D[2026-07-27])
+
+      reloaded = Meetings.get_extraction!(extraction.id, "session")
+      assert reloaded.meeting_date == ~D[2026-03-12]
+      assert reloaded.meeting_date_source == :filename
+    end
+
     test "a retry recomputes an assumed meeting date rather than keeping a stale one" do
       stub_extractor({:error, :api_unavailable})
 
