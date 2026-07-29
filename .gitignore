@@ -39,3 +39,8 @@ npm-debug.log
 # Local secrets and per-machine Claude Code settings.
 .env
 .claude/settings.local.json
+
+# Also cover per-environment variants alongside the .env entry above.
+.env.*
+!.env.example
+/.claude/settings.json
