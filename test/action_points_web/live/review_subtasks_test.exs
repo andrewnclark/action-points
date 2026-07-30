@@ -41,8 +41,9 @@ defmodule ActionPointsWeb.ReviewSubtasksTest do
     Meetings.run_extraction(extraction)
     action_points = Meetings.get_extraction!(extraction.id, session_token).action_points
 
-    {:ok, review, _html} = live(conn, ~p"/review/#{extraction}")
-    %{review: review, action_points: action_points}
+    path = ~p"/review/#{extraction}"
+    {:ok, review, _html} = live(conn, path)
+    %{review: review, conn: conn, path: path, action_points: action_points}
   end
 
   defp dom_id(action_point), do: "action_points-#{action_point.id}"
@@ -89,15 +90,15 @@ defmodule ActionPointsWeb.ReviewSubtasksTest do
     assert has_element?(review, "##{dom_id(copy)}")
   end
 
-  test "the parent picker nests a top-level Action Point under another", %{conn: conn} do
-    %{review: review, action_points: [parent, _copy, _flow, venue]} = open_review(conn)
+  # ADR-0009: nesting is something the meeting did. Review can undo one the
+  # model proposed (Promote), never draw one the meeting never drew.
+  test "no card offers a control for nesting an Action Point", %{conn: conn} do
+    %{review: review, action_points: action_points} = open_review(conn)
 
-    review
-    |> element("#action-point-#{venue.id}-parent-form")
-    |> render_change(%{"parent_id" => to_string(parent.id)})
-
-    assert has_element?(review, "##{dom_id(venue)}[data-parent-id='#{parent.id}']")
-    assert rendered_index(review, parent) < rendered_index(review, venue)
+    for action_point <- action_points do
+      refute has_element?(review, "#action-point-#{action_point.id}-parent-form")
+      refute has_element?(review, "##{dom_id(action_point)} [data-role=parent-picker]")
+    end
   end
 
   test "rejecting a parent promotes its Subtasks in the Review", %{conn: conn} do
@@ -112,20 +113,35 @@ defmodule ActionPointsWeb.ReviewSubtasksTest do
     assert has_element?(review, "##{dom_id(flow)}[data-status=accepted]")
   end
 
-  test "a Subtask card offers no parent picker; a pushed card offers no restructuring", %{
-    conn: conn
-  } do
-    %{review: review, action_points: [parent, copy, _flow, _venue]} = open_review(conn)
+  test "a top-level card offers nothing to promote", %{conn: conn} do
+    %{review: review, action_points: [parent, _copy, _flow, venue]} = open_review(conn)
 
-    refute has_element?(review, "#action-point-#{copy.id}-parent-form")
     refute has_element?(review, "##{dom_id(parent)}-promote")
+    refute has_element?(review, "##{dom_id(venue)}-promote")
   end
 
-  test "a flat Review shows no parent picker when there is nothing to nest under", %{conn: conn} do
-    %{review: review, action_points: [only]} =
-      open_review(conn, {:ok, [%{title: "Book the offsite venue"}]})
+  test "a pushed Subtask offers no Promote — its place in the sink already exists", %{conn: conn} do
+    %{conn: conn, path: path, action_points: [_parent, copy, flow, _venue]} = open_review(conn)
 
-    refute has_element?(review, "#action-point-#{only.id}-parent-form")
+    Meetings.record_push!(copy, %{
+      id: "issue-1",
+      identifier: "ENG-1",
+      url: "https://linear.app/fake/issue/ENG-1"
+    })
+
+    {:ok, review, _html} = live(conn, path)
+
+    refute has_element?(review, "##{dom_id(copy)}-promote")
+    assert has_element?(review, "##{dom_id(flow)}-promote")
+  end
+
+  # The indent says it. A chip repeating it only cost the metadata row its
+  # alignment — see #93.
+  test "a Subtask carries no chip; its position is the only marker", %{conn: conn} do
+    %{review: review, action_points: [_parent, copy, _flow, _venue]} = open_review(conn)
+
+    assert has_element?(review, "##{dom_id(copy)}[data-parent-id]")
+    refute has_element?(review, "##{dom_id(copy)} [data-role=subtask]")
   end
 
   describe "with a connected Task Sink" do
