@@ -24,6 +24,27 @@ defmodule ActionPoints.BillingTest do
     end
   end
 
+  describe "format_price/1" do
+    test "a round price loses the pennies" do
+      assert Billing.format_price(%{currency: "gbp", price_pence: 500}) == "£5"
+    end
+
+    test "a non-round price keeps both decimal places" do
+      assert Billing.format_price(%{currency: "gbp", price_pence: 750}) == "£7.50"
+      assert Billing.format_price(%{currency: "gbp", price_pence: 1234}) == "£12.34"
+    end
+
+    test "a currency with no symbol falls back to its code" do
+      assert Billing.format_price(%{currency: "usd", price_pence: 500}) == "USD 5"
+    end
+
+    # Not the figure — that is config's to change freely (ADR-0003) — but that
+    # what `pack/0` returns is something this function can format at all.
+    test "the configured Pack is formattable as it stands" do
+      assert is_binary(Billing.format_price(Billing.pack()))
+    end
+  end
+
   describe "grant_signup_credit/1" do
     test "cannot grant the signup Credit twice for the same user" do
       user = unconfirmed_user_fixture()

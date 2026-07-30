@@ -125,6 +125,17 @@ defmodule ActionPointsWeb.BuyPackTest do
 
       assert has_element?(lv, "#pack", "15 Credits — 15 meetings")
     end
+
+    test "the price and size follow the config, non-round prices included", %{conn: conn} do
+      original = Application.fetch_env!(:action_points, :pack)
+      Application.put_env(:action_points, :pack, credits: 40, price_pence: 1250, currency: "gbp")
+      on_exit(fn -> Application.put_env(:action_points, :pack, original) end)
+
+      {:ok, lv, _html} = live(conn, ~p"/buy")
+
+      assert has_element?(lv, "#pack", "£12.50")
+      assert has_element?(lv, "#pack", "40 Credits — 40 meetings")
+    end
   end
 
   defp zero_out_balance(user) do

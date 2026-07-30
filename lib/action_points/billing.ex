@@ -50,6 +50,24 @@ defmodule ActionPoints.Billing do
   def pack, do: Map.new(Application.fetch_env!(:action_points, :pack))
 
   @doc """
+  A price in pence rendered the way a reader is quoted it — the one place money
+  becomes a string, so every surface quotes the same figure as the checkout.
+
+  Takes anything carrying a `:currency` and a `:price_pence`, which the Pack
+  from `pack/0` does. A round amount drops the pennies (`"£5"`), anything else
+  keeps both places (`"£7.50"`), and a currency with no symbol falls back to its
+  upper-cased code.
+  """
+  def format_price(%{currency: currency, price_pence: pence}) when rem(pence, 100) == 0,
+    do: "#{currency_symbol(currency)}#{div(pence, 100)}"
+
+  def format_price(%{currency: currency, price_pence: pence}),
+    do: "#{currency_symbol(currency)}#{:erlang.float_to_binary(pence / 100, decimals: 2)}"
+
+  defp currency_symbol("gbp"), do: "£"
+  defp currency_symbol(code), do: String.upcase(code) <> " "
+
+  @doc """
   The configured payment-port adapter (`ActionPoints.Billing.PaymentProvider`).
   """
   def payment_provider, do: Application.fetch_env!(:action_points, :payment_provider)

@@ -182,7 +182,7 @@ defmodule ActionPointsWeb.BuyPackLive do
     {:ok,
      assign(socket,
        pack_credits: pack.credits,
-       pack_price: format_price(pack),
+       pack_price: Billing.format_price(pack),
        checkout_unavailable?: false
      )}
   end
@@ -251,13 +251,4 @@ defmodule ActionPointsWeb.BuyPackLive do
         {:noreply, assign(socket, :checkout_unavailable?, true)}
     end
   end
-
-  defp format_price(%{currency: currency, price_pence: pence}) when rem(pence, 100) == 0,
-    do: "#{currency_symbol(currency)}#{div(pence, 100)}"
-
-  defp format_price(%{currency: currency, price_pence: pence}),
-    do: "#{currency_symbol(currency)}#{:erlang.float_to_binary(pence / 100, decimals: 2)}"
-
-  defp currency_symbol("gbp"), do: "£"
-  defp currency_symbol(code), do: String.upcase(code) <> " "
 end
