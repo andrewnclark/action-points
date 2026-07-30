@@ -59,11 +59,11 @@ A short verbatim excerpt from the Transcript recording what was said about _when
 _Avoid_: deadline text, date quote, due date phrase
 
 **Blocker**:
-A blocked-by relation between two Action Points of the same Extraction, proposed by the Extraction and curated at Review; realised as a real relation in the Task Sink at Push. Relations to pre-existing tasks in the sink are out of scope.
+A blocked-by relation between two Action Points of the same Extraction, proposed by the Extraction and curated at Review; realised as a real relation in the Task Sink at Push. Curated means removed: a Blocker the Extraction got wrong can be taken off at Review, but one the meeting never stated cannot be put on there — an edge between two Action Points is the meeting's to draw, not the user's ([ADR-0009](docs/adr/0009-review-corrects-the-extraction-it-does-not-author-structure.md)). A dependency the meeting stated but the Extraction missed is added in the Task Sink. Relations to pre-existing tasks in the sink are out of scope.
 _Avoid_: dependency, linked issue
 
 **Subtask**:
-An Action Point nested one level under a parent Action Point from the same Extraction — proposed only when the meeting itself broke a deliverable into pieces, never deeper than one level. Rejecting the parent promotes its Subtasks. Blockers and nesting are orthogonal.
+An Action Point nested one level under a parent Action Point from the same Extraction — proposed only when the meeting itself broke a deliverable into pieces, never deeper than one level. Review can undo a nesting the Extraction proposed but cannot create one ([ADR-0009](docs/adr/0009-review-corrects-the-extraction-it-does-not-author-structure.md)); nesting is something the meeting did. Rejecting the parent promotes its Subtasks, and that promotion is not reversible at Review. Blockers and nesting are orthogonal.
 _Avoid_: child issue, sub-issue, checklist item
 
 ### Commerce

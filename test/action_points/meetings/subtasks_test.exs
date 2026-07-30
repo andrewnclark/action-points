@@ -169,54 +169,16 @@ defmodule ActionPoints.Meetings.SubtasksTest do
     end
   end
 
-  describe "set_action_point_parent/2" do
-    test "nests a top-level Action Point under another of the meeting's Action Points" do
-      [parent, loose] = extract([ap("Revamp onboarding"), ap("Rewrite the onboarding copy")])
-
-      assert {:ok, nested} = Meetings.set_action_point_parent(loose, parent)
-      assert nested.parent_id == parent.id
-    end
-
-    test "promotes a Subtask when the parent is cleared" do
+  describe "promote_action_point/1" do
+    test "lifts a Subtask to top level" do
       [_parent, child] =
         extract([ap("Revamp onboarding"), ap("Rewrite the onboarding copy", %{parent: 1})])
 
-      assert {:ok, promoted} = Meetings.set_action_point_parent(child, nil)
+      assert {:ok, promoted} = Meetings.promote_action_point(child)
       assert promoted.parent_id == nil
     end
 
-    test "nesting an Action Point that has children promotes them — never deeper than one level" do
-      [parent, child, new_top] =
-        extract([
-          ap("Revamp onboarding"),
-          ap("Rewrite the onboarding copy", %{parent: 1}),
-          ap("Ship the Q3 launch")
-        ])
-
-      assert {:ok, nested} = Meetings.set_action_point_parent(parent, new_top)
-      assert nested.parent_id == new_top.id
-
-      assert Meetings.get_action_point!(child.id, @session_token).parent_id == nil
-    end
-
-    test "refuses itself as parent" do
-      [only] = extract([ap("Revamp onboarding")])
-
-      assert {:error, :invalid_parent} = Meetings.set_action_point_parent(only, only)
-    end
-
-    test "refuses a parent that is itself a Subtask" do
-      [_top, child, loose] =
-        extract([
-          ap("Revamp onboarding"),
-          ap("Rewrite the onboarding copy", %{parent: 1}),
-          ap("Book the offsite venue")
-        ])
-
-      assert {:error, :invalid_parent} = Meetings.set_action_point_parent(loose, child)
-    end
-
-    test "refuses restructuring a pushed Action Point — its sink hierarchy already exists" do
+    test "refuses a pushed Action Point — its sink hierarchy already exists" do
       [parent, child] =
         extract([ap("Revamp onboarding"), ap("Rewrite the onboarding copy", %{parent: 1})])
 
@@ -227,23 +189,8 @@ defmodule ActionPoints.Meetings.SubtasksTest do
           url: "https://linear.app/fake/issue/ENG-1"
         })
 
-      assert {:error, :pushed} = Meetings.set_action_point_parent(pushed, nil)
-      assert {:error, :pushed} = Meetings.set_action_point_parent(pushed, parent)
+      assert {:error, :pushed} = Meetings.promote_action_point(pushed)
       assert Meetings.get_action_point!(child.id, @session_token).parent_id == parent.id
-    end
-
-    test "refuses a parent from another Extraction" do
-      [foreign] = extract([ap("Book the offsite venue")])
-
-      stub_extractor({:ok, [ap("Revamp onboarding")]})
-
-      {:ok, extraction} =
-        Meetings.create_extraction(nil, "other-session", %{"transcript_text" => @transcript})
-
-      Meetings.run_extraction(extraction)
-      [own] = Meetings.get_extraction!(extraction.id, "other-session").action_points
-
-      assert {:error, :invalid_parent} = Meetings.set_action_point_parent(own, foreign)
     end
   end
 
