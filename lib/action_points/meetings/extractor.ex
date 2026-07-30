@@ -21,6 +21,11 @@ defmodule ActionPoints.Meetings.Extractor do
           # model, verified against the Transcript only when the Extraction
           # finalises.
           required(:quotes) => [String.t()],
+          # The Timing Quote: the words the meeting used about *when* this is
+          # due, claimed verbatim by the model and verified the same way the
+          # Grounding Quotes are. Reported whenever timing was voiced at all,
+          # including timing that resolves to no due date.
+          optional(:timing_quote) => String.t() | nil,
           # Proposed Blockers: the 1-based positions, in this same output, of
           # the sibling Action Points this one waits on — proposed only when
           # the transcript states the ordering. Sanitised (self-references,
