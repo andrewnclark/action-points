@@ -29,8 +29,8 @@ defmodule ActionPoints.Meetings.Timing do
   and values within the range a date can hold — not the vocabulary inside it.
 
   This module currently resolves `absolute` (complete dates), `weekday`,
-  `relative_day`, and `span_end`. `duration` and partial absolute dates are
-  later tickets and resolve to `nil` until theirs land.
+  `relative_day`, `span_end`, and `duration`. Partial absolute dates are a
+  later ticket and resolve to `nil` until theirs lands.
   """
 
   @typedoc "A day of the week, as the classification names it."
@@ -46,8 +46,25 @@ defmodule ActionPoints.Meetings.Timing do
           | %{kind: :weekday, weekday: weekday(), modifier: :this | :next | nil}
           | %{kind: :relative_day, offset: non_neg_integer()}
           | %{kind: :span_end, modifier: :this | :next, unit: :week | :month | :quarter}
-          | %{kind: :duration, unit: :day | :week | :month, count: pos_integer()}
+          | %{kind: :duration, unit: :day | :week | :month, count: pos_integer() | quantifier()}
           | %{kind: :vague}
+
+  @typedoc """
+  A spoken quantifier a duration's count may be given as instead of a number.
+  The lexicon is closed — one entry — and this type is its statement in the
+  code: a quantifier is only ever decoded when it can be named here and tested
+  individually.
+  """
+  @type quantifier :: :couple
+
+  # "A couple of weeks" means two to very nearly everyone, so refusing it
+  # would discard a real deadline on a technicality. "A few", "several",
+  # "some" and "a while" are a different thing entirely: picking three, or
+  # four, or five is invention dressed as resolution, so they classify as
+  # vague and pin nothing. The lexicon is closed rather than open because the
+  # moment quantifiers are read sensibly rather than enumerably, "a few"
+  # follows and there is no principled place to stop.
+  @quantifiers %{couple: 2}
 
   @iso_days %{
     monday: 1,
@@ -58,6 +75,19 @@ defmodule ActionPoints.Meetings.Timing do
     saturday: 6,
     sunday: 7
   }
+
+  @doc """
+  The closed quantifier lexicon: every spoken quantifier a duration's count
+  may be given as, in place of a number.
+
+  Enumerated here, where the decoding happens, so that an adapter asking the
+  model for a quantifier and this module decoding one cannot drift apart. A
+  word an adapter accepted but this module did not know would pin no date at
+  all, and the user would lose a deadline to a table nobody noticed was two
+  tables.
+  """
+  @spec quantifiers() :: [quantifier()]
+  def quantifiers, do: Map.keys(@quantifiers)
 
   @doc """
   Resolves a classification against the meeting date. Returns the due date it
@@ -138,11 +168,38 @@ defmodule ActionPoints.Meetings.Timing do
     |> reject_past(meeting_date)
   end
 
+  # A count given as a spoken quantifier rather than a number decodes through
+  # the closed lexicon and resolves as that number. A quantifier outside the
+  # lexicon falls through to the catch-all and pins nothing, which is the
+  # whole point of the lexicon being a table rather than a judgement.
+  def resolve(%{kind: :duration, count: count} = classification, %Date{} = meeting_date)
+      when is_map_key(@quantifiers, count) do
+    resolve(%{classification | count: @quantifiers[count]}, meeting_date)
+  end
+
+  # "In two weeks": the meeting date plus the length spoken. A duration names
+  # a length rather than a stretch of calendar, so — unlike a span end — it is
+  # left where it lands, weekend or not. Someone who says "in two weeks" on a
+  # Saturday has named a day; moving it would be answering a question nobody
+  # asked.
+  def resolve(%{kind: :duration, unit: unit, count: count}, %Date{} = meeting_date)
+      when unit in [:day, :week] and is_integer(count) and count > 0 do
+    Date.add(meeting_date, if(unit == :week, do: 7, else: 1) * count)
+  end
+
+  # Months count by the calendar rather than in thirty-day blocks, so "in a
+  # month" said on the 15th is the 15th.
+  def resolve(%{kind: :duration, unit: :month, count: count}, %Date{} = meeting_date)
+      when is_integer(count) and count > 0 do
+    shift_months(meeting_date, count)
+  end
+
   # Everything else pins nothing. That covers three different things, all of
-  # which end the same way: `vague`, which pins nothing by definition;
-  # `duration`, which pins nothing until its ticket lands the rules; and
-  # anything malformed — an unknown kind, a misspelt weekday, a `span_end` in
-  # a unit this module does not know, a negative `relative_day` offset. The
+  # which end the same way: `vague`, which pins nothing by definition; a
+  # partial `absolute` date, which pins nothing until its ticket lands the
+  # rules; and anything malformed — an unknown kind, a misspelt weekday, a
+  # `span_end` in a unit this module does not know, a duration counted in a
+  # quantifier outside the lexicon, a negative `relative_day` offset. The
   # last group is why this clause is a catch-all rather than a list of known
   # kinds: a malformed classification must never cost the user their Action
   # Point, so the resolver has to have an answer for a classification nobody
@@ -164,6 +221,15 @@ defmodule ActionPoints.Meetings.Timing do
     |> Date.new!(div(date.month - 1, 3) * 3 + 1, 1)
     |> add_months(3 * ahead + 2)
     |> Date.end_of_month()
+  end
+
+  # The same date `count` months on, keeping its day where the target month
+  # has one. A day the target month does not have — the 31st of a 30-day
+  # month — lands on that month's last, which is the reading that keeps the
+  # deadline inside the month "in a month" named.
+  defp shift_months(%Date{} = date, count) do
+    target = add_months(date, count)
+    Date.new!(target.year, target.month, min(date.day, Date.days_in_month(target)))
   end
 
   defp add_months(%Date{} = date, count) do

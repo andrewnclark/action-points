@@ -38,10 +38,14 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
       — report whether it was this or next, and whether a week, month, or
       quarter. Naming a span pins a date even when the phrasing sounds
       loose: "sometime next month" is a span, not vague
-    - "duration": a length of time out ("in two weeks") — report the unit
-      and the count
+    - "duration": a length of time out ("in two weeks", "in 10 days") —
+      report the unit, and the count as the number the meeting stated,
+      whether it was said in digits or in words. The only count that is not
+      a number is "a couple", which is reported as the word "couple". Never
+      put a number on a quantifier nobody stated: "a few weeks", "several
+      months", "some time" and "a while" are vague, not durations
     - "vague": a deadline was voiced but pins down no date ("soon", "before
-      the launch", "when things calm down")
+      the launch", "when things calm down", "in a few weeks")
     - null: no deadline was mentioned at all. Never invent timing that was
       not said aloud
   - timing_quote: the exact words the meeting used about *when* this task is
@@ -101,6 +105,14 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
   @span_units %{"week" => :week, "month" => :month, "quarter" => :quarter}
   @duration_units %{"day" => :day, "week" => :week, "month" => :month}
 
+  # The closed quantifier lexicon as the schema's enum, derived from the one
+  # `Timing` decodes rather than restated: a word this adapter accepted and
+  # the resolver did not know would cost the user a deadline, and nothing
+  # would report it. Putting it in the schema at all — rather than asking the
+  # prompt to read quantifiers sensibly — is what keeps the lexicon closed:
+  # "a few" has nowhere to go but `vague`.
+  @quantifiers Map.new(ActionPoints.Meetings.Timing.quantifiers(), &{Atom.to_string(&1), &1})
+
   # The timing classification: a tagged union, `kind` the tag. `vague` has
   # nowhere to put a date by construction — the boundary between pinnable and
   # unpinnable language is the schema's, not the prompt's to ask for.
@@ -152,7 +164,9 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
         "properties" => %{
           "kind" => %{"enum" => ["duration"]},
           "unit" => %{"enum" => Map.keys(@duration_units)},
-          "count" => %{"type" => "integer"}
+          "count" => %{
+            "anyOf" => [%{"type" => "integer"}, %{"enum" => Map.keys(@quantifiers)}]
+          }
         },
         "required" => ["kind", "unit", "count"],
         "additionalProperties" => false
@@ -325,16 +339,29 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
     end
   end
 
-  defp parse_timing(%{"kind" => "duration", "unit" => unit, "count" => count})
-       when is_integer(count) and count > 0 do
-    case @duration_units do
-      %{^unit => u} -> %{kind: :duration, unit: u, count: count}
+  defp parse_timing(%{"kind" => "duration", "unit" => unit, "count" => count}) do
+    with %{^unit => u} <- @duration_units,
+         {:ok, c} <- parse_count(count) do
+      %{kind: :duration, unit: u, count: c}
+    else
       _ -> nil
     end
   end
 
   defp parse_timing(%{"kind" => "vague"}), do: %{kind: :vague}
   defp parse_timing(_), do: nil
+
+  # A duration's count: a number the meeting stated, or a word from the closed
+  # lexicon. A quantifier outside the lexicon — "a few", which the prompt asks
+  # to be classified as vague — never becomes a count at all.
+  defp parse_count(count) when is_integer(count) and count > 0, do: {:ok, count}
+
+  defp parse_count(count) do
+    case @quantifiers do
+      %{^count => quantifier} -> {:ok, quantifier}
+      _ -> :error
+    end
+  end
 
   defp parse_modifier("this"), do: {:ok, :this}
   defp parse_modifier("next"), do: {:ok, :next}
