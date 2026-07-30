@@ -357,21 +357,7 @@ defmodule ActionPoints.Meetings.TimingTest do
     test "every kind that can pin a date pins one" do
       # The union is closed, so it can be enumerated: no kind of timing
       # language the model can report is left waiting on a later ticket.
-      pinning = [
-        %{kind: :absolute, year: 2027, month: 3, day: 3},
-        partial(3, 3),
-        day_only(3),
-        weekday(:wednesday),
-        %{kind: :relative_day, offset: 1},
-        span(:this, :week),
-        span(:next, :month),
-        span(:this, :quarter),
-        duration(:day, 10),
-        duration(:week, :couple),
-        duration(:month, 1)
-      ]
-
-      for classification <- pinning do
+      for classification <- pinning_classifications() do
         assert %Date{} = Timing.resolve(classification, @tuesday)
       end
     end
@@ -450,6 +436,137 @@ defmodule ActionPoints.Meetings.TimingTest do
       assert Timing.resolve(duration(:week, -2), @tuesday) == nil
       assert Timing.resolve(duration(:week, "2"), @tuesday) == nil
     end
+  end
+
+  # A `nil` due date used to mean four different things at once. `pin/2` is
+  # where they are told apart: the four reasons are the whole of the answer,
+  # and each is a different fact about the meeting.
+  describe "why nothing was pinned" do
+    test "no timing language at all is unspoken" do
+      assert Timing.pin(nil, @tuesday) == {:unpinned, :unspoken}
+    end
+
+    test "language too vague to pin is vague" do
+      assert Timing.pin(%{kind: :vague}, @tuesday) == {:unpinned, :vague}
+    end
+
+    test "a classification the resolver cannot read is malformed" do
+      # Every one of these says the same thing about the Extractor rather than
+      # about the meeting: it emitted something no meeting could have said.
+      unreadable = [
+        %{kind: :fortnight_end},
+        %{kind: nil},
+        %{kind: "weekday", weekday: :monday},
+        weekday(:someday),
+        %{kind: :weekday},
+        %{kind: :weekday, weekday: "monday"},
+        %{kind: :relative_day, offset: -1},
+        %{kind: :relative_day, offset: :tomorrow},
+        %{kind: :relative_day},
+        %{kind: :absolute},
+        %{kind: :absolute, day: 3},
+        %{kind: :absolute, year: 2026},
+        %{kind: :absolute, year: 2027, month: nil, day: 3},
+        %{kind: :absolute, year: 2026, month: 13, day: 40},
+        %{kind: :absolute, year: nil, month: 3, day: "3"},
+        partial(2, 30),
+        partial(13, 1),
+        day_only(32),
+        day_only(0),
+        %{kind: :span_end},
+        %{kind: :span_end, modifier: :this, unit: :fortnight},
+        %{kind: :duration},
+        duration(:fortnight, 1),
+        duration(:week, 0),
+        duration(:week, "2"),
+        duration(:week, :few)
+      ]
+
+      for classification <- unreadable do
+        assert Timing.pin(classification, @tuesday) == {:unpinned, :malformed},
+               "#{inspect(classification)} was not reported malformed"
+      end
+    end
+
+    test "a date the meeting stated in full and the calendar does not hold is malformed" do
+      # Every part was said, so there is nothing for the resolver to supply and
+      # nothing for it to decline: February the 30th, and February the 29th of
+      # a year that has no such day, are dates the model got wrong.
+      assert Timing.pin(%{kind: :absolute, year: 2026, month: 2, day: 30}, @tuesday) ==
+               {:unpinned, :malformed}
+
+      assert Timing.pin(%{kind: :absolute, year: 2026, month: 2, day: 29}, @tuesday) ==
+               {:unpinned, :malformed}
+    end
+
+    test "a span whose working days are already spent is declined" do
+      # Saturday 31 October 2026 and Saturday 30 September 2028: the language
+      # was read perfectly well, and the rule refused the date it would pin.
+      assert Timing.pin(span(:this, :month), ~D[2026-10-31]) == {:unpinned, :declined}
+      assert Timing.pin(span(:this, :quarter), ~D[2028-09-30]) == {:unpinned, :declined}
+    end
+
+    test "a completion outside the search's forward reach is declined" do
+      # "The 29th of February", said in the run-up to two non-leap years. The
+      # day is a real one and the model heard it right — the resolver simply
+      # will not reach past the year ahead for it. That is a decline, not a
+      # defect, and the distinction is the whole point of the two reasons.
+      assert Timing.pin(partial(2, 29), @tuesday) == {:unpinned, :declined}
+      assert Timing.pin(partial(2, 29), ~D[2028-01-05]) == {:pinned, ~D[2028-02-29]}
+    end
+
+    test "every kind that pins a date reports it pinned" do
+      for classification <- pinning_classifications() do
+        assert {:pinned, %Date{}} = Timing.pin(classification, @tuesday)
+      end
+    end
+  end
+
+  # Callers that only need "is there a date" keep asking for one, and never
+  # have to learn the reasons.
+  describe "resolve/2, for callers that only need a date" do
+    test "every reason collapses to nil, whichever of the four it is" do
+      # Named one at a time rather than derived from `pin/2`, so that a reason
+      # that stopped collapsing would fail here rather than agree with itself.
+      unpinned = [
+        {nil, @tuesday},
+        {%{kind: :vague}, @tuesday},
+        {%{kind: :fortnight_end}, @tuesday},
+        {weekday(:someday), @tuesday},
+        {partial(2, 30), @tuesday},
+        {partial(2, 29), @tuesday},
+        {span(:this, :month), ~D[2026-10-31]}
+      ]
+
+      for {classification, anchor} <- unpinned do
+        assert Timing.resolve(classification, anchor) == nil,
+               "#{inspect(classification)} from #{anchor} resolved to a date"
+      end
+    end
+
+    test "a pinned date arrives bare, exactly as pin/2 pinned it" do
+      for classification <- pinning_classifications() do
+        {:pinned, date} = Timing.pin(classification, @tuesday)
+        assert Timing.resolve(classification, @tuesday) == date
+      end
+    end
+  end
+
+  defp pinning_classifications do
+    [
+      %{kind: :absolute, year: 2027, month: 3, day: 3},
+      partial(3, 3),
+      day_only(3),
+      weekday(:wednesday),
+      weekday(:wednesday, :next),
+      %{kind: :relative_day, offset: 1},
+      span(:this, :week),
+      span(:next, :month),
+      span(:this, :quarter),
+      duration(:day, 10),
+      duration(:week, :couple),
+      duration(:month, 1)
+    ]
   end
 
   defp partial(month, day), do: %{kind: :absolute, year: nil, month: month, day: day}
