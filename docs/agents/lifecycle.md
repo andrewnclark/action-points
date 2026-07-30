@@ -16,6 +16,8 @@ mix deps.get
 
 Wait until `docker inspect -f '{{.State.Health.Status}}' ap-N-db-1` reports `healthy`.
 
+If docker answers `permission denied` on `/var/run/docker.sock` even outside the sandbox, your shell's group list is stale (the session predates the user's docker group membership) — wrap the command in `sg docker -c '…'`.
+
 No `.env` is needed and no asset build is needed: the test suite swaps every external port (extractor, task sink, payments) for fakes in `test/support/`, and Phoenix tests render without built assets — do not waste time on `mix assets.build` or npm.
 
 Completion: healthy Postgres on your own host port, `deps/` fetched, both env vars exported in the shell that will run tests.
@@ -23,6 +25,8 @@ Completion: healthy Postgres on your own host port, `deps/` fetched, both env va
 ## Implement
 
 Follow `/implement` for issue #N: `/tdd` at pre-agreed seams, CONTEXT.md vocabulary, ADRs in `docs/adr/` respected.
+
+Run any review pass **inline in your own context** — never spawn background sub-agents and stop to wait for them; their completion signals route to the orchestrator, not to you, and a turn ended "waiting" is a stall.
 
 Tests run on the host against your own forwarded port — `config/test.exs` reads `DB_PORT` (default 5433), and the `mix test` alias creates and migrates `action_points_test` in your container on first run; there is no shared database to trample.
 
