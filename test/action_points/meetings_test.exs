@@ -329,6 +329,17 @@ defmodule ActionPoints.MeetingsTest do
       assert action_point.due_date == ~D[2026-06-30]
     end
 
+    test "a duration counts on from the meeting date and is stored" do
+      # "…in a couple of weeks", said in a meeting held on 4 May 2026.
+      action_point =
+        run_with_timing(%{kind: :duration, unit: :week, count: :couple},
+          local_date: ~D[2026-07-27],
+          stated_meeting_date: ~D[2026-05-04]
+        )
+
+      assert action_point.due_date == ~D[2026-05-18]
+    end
+
     test "a vague classification produces an Action Point with no due date" do
       action_point =
         run_with_timing(%{kind: :vague}, local_date: ~D[2026-07-27])
