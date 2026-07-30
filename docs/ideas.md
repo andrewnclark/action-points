@@ -19,6 +19,32 @@ Questions to grill:
 - Does this stay behind the Task Sink port (ADR-0002) when a second sink
   arrives with its own user model?
 
+## The working week as a user setting
+
+Today "working day" is Monday to Friday, hard-coded, and it only ever
+bites on a span end ("by the end of the month" never lands on a Sunday).
+Let the user say which days they work, so a Sunday–Thursday week, or a
+four-day week, resolves span ends onto a day that person actually works.
+
+Questions to grill:
+
+- Does it change the Timing Classification, or only the resolution? The
+  claim to test: only resolution. "End of the week" is the same spoken
+  language whoever hears it, so the prompt stays static and stays
+  cacheable (ADR-0008, and #28's "the extraction prompt is not given the
+  current date, the meeting date, or a time"). If that holds, this never
+  touches the prompt or the evaluation fixtures.
+- Does the setting change what "the week" *is*, as well as which of its
+  days are working ones? A Sunday–Thursday worker saying "next week"
+  probably does not mean the week beginning Monday.
+- Where does it live — the account? Then what does the Demo use, where
+  there is no account, and does a signup at Push re-resolve dates the
+  visitor already reviewed under the default?
+- Is a per-Extraction override needed, or is one setting per account
+  right? The meeting's own working week may not be the user's.
+- Is the cheapest honest version a no-op — leave Monday to Friday, and
+  spend the build elsewhere until someone outside it actually asks?
+
 ## Blocking issues
 
 Let pushed issues carry blocked-by / blocking relations — either between

@@ -43,8 +43,12 @@ The day the meeting happened, recorded on the Extraction and stated at Review. E
 _Avoid_: date, timestamp, upload date (the upload date is only ever the assumed fallback)
 
 **Timing Classification**:
-The Extraction's report of what kind of timing language the meeting used about an Action Point's deadline — a named weekday, a stated date, "tomorrow", "soon" — never a computed date. The model classifies; the application resolves the classification against the Meeting Date into a due date, or into none — when the language pins no date ("vague"), or when a resolution rule declines because the date it would pin is not one a deliverable can have. Resolved due dates land on a _working day_, Monday to Friday: these are work deliverables, and a task dated to a Sunday is visibly a machine's answer.
+The Extraction's report of what kind of timing language the meeting used about an Action Point's deadline — a named weekday, a stated date, "tomorrow", "soon" — never a computed date. The model classifies; the application resolves the classification against the Meeting Date into a due date, or into none — when the language pins no date ("vague"), or when a resolution rule declines because the date it would pin is not one a deliverable can have. Language naming a stretch of calendar rather than a day ("by the end of the month") resolves to the last _working day_, Monday to Friday, that the stretch contains: these are work deliverables, and a task dated to a Sunday is visibly a machine's answer. Language naming a day — a weekday, "tomorrow", "in two weeks" — is taken at its word and lands where it falls, weekend or not; the speaker chose that day, so it is not the application's to move.
 _Avoid_: deadline (the language spoken in the meeting), due date (the resolved result)
+
+**Quantifier Lexicon**:
+The enumerated set of spoken quantifiers a Timing Classification may count in instead of a number, and what each one counts as. Closed — today a single entry, "a couple", counting as 2 — so that every quantifier the application decodes can be named and tested; vaguer quantifiers ("a few", "several", "some", "a while") are vague language and pin no date, because the number would be the model's invention rather than the meeting's word.
+_Avoid_: number words, fuzzy durations, quantifier mapping
 
 **Grounding Quote**:
 A short verbatim excerpt from the Transcript attached to an Action Point as evidence, verified to actually appear in the Transcript. Travels with the Action Point into the Task Sink.
