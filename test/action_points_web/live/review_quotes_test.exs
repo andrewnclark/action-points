@@ -17,7 +17,7 @@ defmodule ActionPointsWeb.ReviewQuotesTest do
                          title: "Send the Q3 report to finance",
                          description: "Priya committed to sending the Q3 report to finance.",
                          assignee_guess: "Priya",
-                         due_date: nil,
+                         timing: nil,
                          quotes: [
                            "I'll send the Q3 report to finance by Friday.",
                            "no rush on that one."
@@ -27,7 +27,7 @@ defmodule ActionPointsWeb.ReviewQuotesTest do
                          title: "Book the offsite venue",
                          description: "Tom will book the venue for the offsite.",
                          assignee_guess: "Tom",
-                         due_date: nil,
+                         timing: nil,
                          quotes: []
                        }
                      ]}

@@ -32,7 +32,7 @@ defmodule ActionPoints.Meetings.FakeExtractor do
            title: "Follow up on the meeting",
            description: "A canned Action Point from the fake Extractor.",
            assignee_guess: nil,
-           due_date: nil,
+           timing: nil,
            quotes: []
          }
        ]
