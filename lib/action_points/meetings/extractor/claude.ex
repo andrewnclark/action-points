@@ -6,6 +6,11 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
 
   @behaviour ActionPoints.Meetings.Extractor
 
+  # Changing @system_prompt below? Run the classification evaluation suite —
+  # `mix test --include eval test/eval`. It is the only thing that checks the
+  # model still classifies timing the way the application resolves it, and it
+  # is excluded from the default run, so nothing else will notice.
+
   @url "https://api.anthropic.com/v1/messages"
   @model "claude-sonnet-5"
 
