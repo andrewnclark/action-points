@@ -44,3 +44,7 @@ npm-debug.log
 .env.*
 !.env.example
 /.claude/settings.json
+
+# Hex and Mix caches for the agent toolchain container (docker-compose app service)
+/.mix/
+/.hex/

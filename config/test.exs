@@ -11,7 +11,9 @@ config :bcrypt_elixir, :log_rounds, 1
 config :action_points, ActionPoints.Repo,
   username: "postgres",
   password: "postgres",
-  hostname: "localhost",
+  # localhost when the suite runs on the host, `db` when it runs inside the
+  # agent toolchain container — see docker-compose.yml.
+  hostname: System.get_env("DB_HOST") || "localhost",
   port: String.to_integer(System.get_env("DB_PORT") || "5433"),
   database: "action_points_test#{System.get_env("MIX_TEST_PARTITION")}",
   pool: Ecto.Adapters.SQL.Sandbox,

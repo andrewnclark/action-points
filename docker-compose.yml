@@ -5,6 +5,10 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
+      # Kept for the developer: psql, a GUI client, and `mix phx.server` run on
+      # the host and need a way in. Agents working through the `app` service do
+      # not use this — they reach the database at db:5432 on the compose
+      # network, so their DB_PORT only has to avoid clashing on the host.
       - "${DB_PORT:-5433}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -13,6 +17,39 @@ services:
       interval: 2s
       timeout: 2s
       retries: 15
+
+  # The toolchain a ticket agent works inside. The developer does not need this
+  # service; `docker compose up -d db` alone still gives the ordinary local
+  # setup, unchanged.
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    working_dir: /app
+    # Run as the invoking user so files written into the bind mount are owned
+    # by them. Without this, everything mix generates — migrations, formatted
+    # files, _build — lands root-owned and the host cannot `git add` it.
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    environment:
+      # Inside the network the database is a service name on its own port; the
+      # host-side DB_PORT juggling is irrelevant here.
+      DB_HOST: db
+      DB_PORT: "5432"
+      # Kept inside the bind mount so they are owned by the invoking user and
+      # scoped to this worktree. A named volume would be created root-owned and
+      # unwritable by a non-root container user.
+      MIX_HOME: /app/.mix
+      HEX_HOME: /app/.hex
+    volumes:
+      # Source stays bind-mounted, deliberately: it is how the developer and
+      # the orchestrator read a parked agent's work with ordinary tools, and
+      # how git and gh keep working with the host's credentials.
+      - .:/app
+    depends_on:
+      db:
+        condition: service_healthy
+    # No server, no entrypoint — the container exists to be exec'd into.
+    command: sleep infinity
 
 volumes:
   pgdata:
