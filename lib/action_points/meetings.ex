@@ -17,6 +17,7 @@ defmodule ActionPoints.Meetings do
   alias ActionPoints.Meetings.Extraction
   alias ActionPoints.Meetings.GroundingQuote
   alias ActionPoints.Meetings.Timing
+  alias ActionPoints.Meetings.TimingQuote
   alias ActionPoints.Meetings.Transcript
   alias ActionPoints.RateLimiter
   alias ActionPoints.Repo
@@ -291,6 +292,7 @@ defmodule ActionPoints.Meetings do
             attrs =
               attrs
               |> verify_quotes(extraction)
+              |> verify_timing_quote(extraction)
               |> resolve_due_date(anchor)
 
             action_point =
@@ -395,6 +397,15 @@ defmodule ActionPoints.Meetings do
   defp verify_quotes(attrs, extraction) do
     quotes = GroundingQuote.verify(Map.get(attrs, :quotes, []), extraction.transcript_text)
     Map.put(attrs, :quotes, quotes)
+  end
+
+  # The Timing Quote gets the same mechanical check (issue #37), and dropping
+  # it is deliberately independent of `resolve_due_date/2`: verification
+  # governs the words, never the date, so a paraphrased quote costs the user
+  # the words and nothing else.
+  defp verify_timing_quote(attrs, extraction) do
+    quote = TimingQuote.verify(Map.get(attrs, :timing_quote), extraction.transcript_text)
+    Map.put(attrs, :timing_quote, quote)
   end
 
   # The Extraction's proposed Blockers, persisted as rows between the Action

@@ -580,6 +580,62 @@ defmodule ActionPoints.MeetingsTest do
     end
   end
 
+  describe "Timing Quotes" do
+    test "a Timing Quote that appears in the Transcript is stored on the Action Point" do
+      action_point = extract_action_point(%{timing_quote: "by Friday"})
+
+      assert action_point.timing_quote == "by Friday"
+    end
+
+    test "the Timing Quote is its own field, never folded into the description" do
+      action_point =
+        extract_action_point(%{
+          description: "Priya owns the Q3 report.",
+          timing_quote: "by Friday"
+        })
+
+      assert action_point.description == "Priya owns the Q3 report."
+      assert action_point.timing_quote == "by Friday"
+    end
+
+    test "a Timing Quote is matched across the Transcript's line breaks" do
+      action_point =
+        extract_action_point(%{timing_quote: "the draft first,   so the numbers must be final"})
+
+      assert action_point.timing_quote == "the draft first, so the numbers must be final"
+    end
+
+    test "a paraphrased Timing Quote is dropped and the Extraction still succeeds" do
+      action_point = extract_action_point(%{timing_quote: "by the end of the week"})
+
+      assert action_point.timing_quote == nil
+      assert action_point.title == "Send the Q3 report"
+    end
+
+    test "dropping the Timing Quote leaves the resolved due date intact" do
+      action_point =
+        extract_action_point(%{
+          timing: %{kind: :absolute, year: 2026, month: 3, day: 20},
+          timing_quote: "words nobody in this meeting said"
+        })
+
+      assert action_point.timing_quote == nil
+      assert action_point.due_date == ~D[2026-03-20]
+    end
+
+    test "a Timing Quote survives timing that resolves to no due date" do
+      action_point =
+        extract_action_point(%{timing: %{kind: :vague}, timing_quote: "by Friday"})
+
+      assert action_point.due_date == nil
+      assert action_point.timing_quote == "by Friday"
+    end
+
+    test "an Extractor result with no Timing Quote stores none" do
+      assert extract_action_point(%{}).timing_quote == nil
+    end
+  end
+
   describe "get_action_point!/2" do
     test "returns the Action Point for the owning session" do
       action_point = create_action_point("owner-session")

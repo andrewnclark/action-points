@@ -47,6 +47,7 @@ defmodule ActionPoints.Meetings.Extractor.ClaudeTest do
                       "month" => 7,
                       "day" => 31
                     },
+                    "timing_quote" => "by July 31st 2026",
                     "quotes" => ["I'll send the Q3 report by July 31st 2026."],
                     "blocked_by" => []
                   },
@@ -73,6 +74,7 @@ defmodule ActionPoints.Meetings.Extractor.ClaudeTest do
              description: "Priya will send the Q3 report.",
              assignee_guess: "Priya",
              timing: %{kind: :absolute, year: 2026, month: 7, day: 31},
+             timing_quote: "by July 31st 2026",
              quotes: ["I'll send the Q3 report by July 31st 2026."],
              # A missing parent key parses as no parent, like quotes below.
              parent: nil,
@@ -89,6 +91,9 @@ defmodule ActionPoints.Meetings.Extractor.ClaudeTest do
     # The schema demands quotes, but a missing key parses as none — quote
     # trouble must never cost the user their Action Points.
     assert second.quotes == []
+
+    # Same for the Timing Quote: a missing (or non-text) key is no quote.
+    assert second.timing_quote == nil
   end
 
   test "a missing blocked_by key parses as no proposed Blockers" do

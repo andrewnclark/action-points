@@ -41,6 +41,14 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
       the launch", "when things calm down")
     - null: no deadline was mentioned at all. Never invent timing that was
       not said aloud
+  - timing_quote: the exact words the meeting used about *when* this task is
+    due — "by the end of next week", "before the board meeting", "in a few
+    weeks" — copied character for character from the transcript, and kept
+    short: the timing phrase and just enough around it to read it, not the
+    whole sentence. Report it whenever timing was voiced at all, including
+    timing too vague to pin a date on; null only when the meeting said
+    nothing about when. Like the quotes, it is checked against the
+    transcript and a paraphrase is silently discarded.
   - quotes: up to three short verbatim excerpts from the transcript — the
     decision-bearing words actually spoken about this task. Copy them
     character for character from the transcript; every quote is checked
@@ -170,6 +178,9 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
             "description" => %{"type" => "string"},
             "assignee_guess" => %{"anyOf" => [%{"type" => "string"}, %{"type" => "null"}]},
             "timing" => @timing_schema,
+            # The Timing Quote, claimed verbatim; `TimingQuote.verify/2` at
+            # finalise is what makes the claim true or drops it.
+            "timing_quote" => %{"anyOf" => [%{"type" => "string"}, %{"type" => "null"}]},
             # No `maxItems`: structured outputs reject it outright ("For
             # 'array' type, property 'maxItems' is not supported"), failing the
             # whole request. The cap is the prompt's to ask for and
@@ -190,6 +201,7 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
             "description",
             "assignee_guess",
             "timing",
+            "timing_quote",
             "quotes",
             "parent",
             "blocked_by"
@@ -260,11 +272,17 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
       description: action_point["description"],
       assignee_guess: action_point["assignee_guess"],
       timing: parse_timing(action_point["timing"]),
+      timing_quote: parse_timing_quote(action_point["timing_quote"]),
       quotes: action_point["quotes"] || [],
       parent: parse_parent(action_point["parent"]),
       blocked_by: action_point["blocked_by"] || []
     }
   end
+
+  # Anything that is not text reads as no Timing Quote; the words themselves
+  # are only ever trusted after verification against the Transcript.
+  defp parse_timing_quote(quote) when is_binary(quote), do: quote
+  defp parse_timing_quote(_quote), do: nil
 
   # Anything but a plausible position reads as no parent — like malformed
   # timing, a malformed reference must never cost the user their Action Points.

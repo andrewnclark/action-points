@@ -50,6 +50,10 @@ _Avoid_: deadline (the language spoken in the meeting), due date (the resolved r
 A short verbatim excerpt from the Transcript attached to an Action Point as evidence, verified to actually appear in the Transcript. Travels with the Action Point into the Task Sink.
 _Avoid_: citation, snippet, source
 
+**Timing Quote**:
+A short verbatim excerpt from the Transcript recording what was said about _when_ an Action Point is due, verified to actually appear in the Transcript. Present whenever the meeting expressed timing, with or without a resolved due date — so language that pins no date ("in a few weeks") still reaches the assignee. Shown at Review beside the due date and travelling with the Action Point into the Task Sink.
+_Avoid_: deadline text, date quote, due date phrase
+
 **Blocker**:
 A blocked-by relation between two Action Points of the same Extraction, proposed by the Extraction and curated at Review; realised as a real relation in the Task Sink at Push. Relations to pre-existing tasks in the sink are out of scope.
 _Avoid_: dependency, linked issue

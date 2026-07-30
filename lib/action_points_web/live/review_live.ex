@@ -534,6 +534,28 @@ defmodule ActionPointsWeb.ReviewLive do
                       </select>
                     </form>
                   </div>
+                  <%!-- Timing Quote: the meeting's own words about when this
+                  is due, set beneath the chip row that carries the due date so
+                  the resolution is checkable at a glance ("20 Jul 2026" next
+                  to "end of next week") and misattribution is visible without
+                  reopening the Transcript. It stands alone when no date could
+                  be resolved — urgency the meeting voiced must not vanish
+                  between the meeting and the assignee's board. --%>
+                  <p
+                    :if={action_point.timing_quote}
+                    id={"#{dom_id}-timing-quote"}
+                    data-role="timing-quote"
+                    class="mt-1.5 flex items-start gap-1.5 text-xs text-base-content/65"
+                  >
+                    <.icon
+                      name="hero-chat-bubble-bottom-center-text-micro"
+                      class="mt-px size-3.5 shrink-0"
+                    />
+                    <%!-- Clamped, never truncated in the data: a long quote is
+                    still verbatim, but it must not become the biggest thing on
+                    a card the user is scanning. --%>
+                    <span class="line-clamp-2 italic">“{action_point.timing_quote}”</span>
+                  </p>
                 <% end %>
               </li>
             </ul>
