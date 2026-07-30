@@ -40,6 +40,14 @@ services:
       # unwritable by a non-root container user.
       MIX_HOME: /app/.mix
       HEX_HOME: /app/.hex
+      # The invoking uid has no passwd entry in the image, so HOME would
+      # default to `/`, which the container user cannot write. elixir_make
+      # caches precompiled NIFs under $XDG_CACHE_HOME, which defaults to
+      # $HOME/.cache, so `mix deps.get` + compile fails outright without this
+      # (lazy_html today, any future precompiled dependency tomorrow). Inside
+      # the bind mount for the same reason as the two above: owned by the
+      # invoking user, scoped to this worktree.
+      HOME: /app/.home
     volumes:
       # Source stays bind-mounted, deliberately: it is how the developer and
       # the orchestrator read a parked agent's work with ordinary tools, and
