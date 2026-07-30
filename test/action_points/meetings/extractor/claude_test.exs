@@ -47,14 +47,16 @@ defmodule ActionPoints.Meetings.Extractor.ClaudeTest do
                       "month" => 7,
                       "day" => 31
                     },
-                    "quotes" => ["I'll send the Q3 report by July 31st 2026."]
+                    "quotes" => ["I'll send the Q3 report by July 31st 2026."],
+                    "blocked_by" => []
                   },
                   %{
                     "title" => "Circle back on hiring",
                     "description" => "Vague commitment to revisit hiring.",
                     "assignee_guess" => nil,
                     "timing" => nil,
-                    "parent" => 1
+                    "parent" => 1,
+                    "blocked_by" => [1]
                   }
                 ]
               })
@@ -73,7 +75,8 @@ defmodule ActionPoints.Meetings.Extractor.ClaudeTest do
              timing: %{kind: :absolute, year: 2026, month: 7, day: 31},
              quotes: ["I'll send the Q3 report by July 31st 2026."],
              # A missing parent key parses as no parent, like quotes below.
-             parent: nil
+             parent: nil,
+             blocked_by: []
            }
 
     assert second.assignee_guess == nil
@@ -81,10 +84,39 @@ defmodule ActionPoints.Meetings.Extractor.ClaudeTest do
 
     # A proposed Subtask carries its parent's 1-based position through.
     assert second.parent == 1
+    assert second.blocked_by == [1]
 
     # The schema demands quotes, but a missing key parses as none — quote
     # trouble must never cost the user their Action Points.
     assert second.quotes == []
+  end
+
+  test "a missing blocked_by key parses as no proposed Blockers" do
+    stub_response(fn conn ->
+      Req.Test.json(conn, %{
+        "stop_reason" => "end_turn",
+        "content" => [
+          %{
+            "type" => "text",
+            "text" =>
+              Jason.encode!(%{
+                "meeting_date" => nil,
+                "action_points" => [
+                  %{
+                    "title" => "Send the Q3 report",
+                    "description" => "Priya will send the Q3 report.",
+                    "assignee_guess" => nil,
+                    "timing" => nil,
+                    "quotes" => []
+                  }
+                ]
+              })
+          }
+        ]
+      })
+    end)
+
+    assert {:ok, %{action_points: [%{blocked_by: []}]}} = Claude.extract(@transcript)
   end
 
   test "parses each timing kind into the tagged union" do
