@@ -173,6 +173,26 @@ defmodule ActionPointsWeb.ReviewLive do
               </p>
             </div>
 
+            <%!-- Said once, above the cards, because the reason matters and
+            does not bear repeating on every chip: a date we resolved wrongly
+            becomes someone else's overdue task the moment it is Pushed. The
+            Push is not blocked — the decision stays the user's. --%>
+            <div
+              :if={@past_due_count > 0}
+              id="past-due-notice"
+              class="mb-4 flex gap-3 rounded-box border border-warning/40 bg-warning/10 p-4"
+              role="alert"
+            >
+              <.icon name="hero-exclamation-triangle" class="size-5 shrink-0 text-warning" />
+              <p class="text-base-content/70">
+                {ngettext(
+                  "1 accepted Action Point has a due date that has already passed, so Pushing creates it already overdue in Linear. Edit or clear the date if the meeting meant something else.",
+                  "%{count} accepted Action Points have due dates that have already passed, so Pushing creates them already overdue in Linear. Edit or clear the dates if the meeting meant something else.",
+                  @past_due_count
+                )}
+              </p>
+            </div>
+
             <div
               :if={@push_failure}
               id="push-failure"
@@ -456,23 +476,7 @@ defmodule ActionPointsWeb.ReviewLive do
                       sink_users={@sink_users}
                       pickable={@sink_live? and is_nil(action_point.sink_issue_id)}
                     />
-                    <.chip
-                      :if={action_point.due_date}
-                      role="due-date"
-                      icon="hero-calendar-micro"
-                    >
-                      {Calendar.strftime(action_point.due_date, "%-d %b %Y")}
-                    </.chip>
-                    <%!-- A missing due date is stated, not left blank: the model
-                    heard no date, which is different from nobody having looked. --%>
-                    <.chip
-                      :if={is_nil(action_point.due_date)}
-                      role="no-due-date"
-                      icon="hero-calendar-micro"
-                      empty
-                    >
-                      No due date
-                    </.chip>
+                    <.due_date_field action_point={action_point} today={@today} />
                     <%!-- Blockers: the ordering the meeting stated, editable
                     until this Action Point is real in the Task Sink. A wrong
                     guess costs one click. --%>
@@ -629,22 +633,85 @@ defmodule ActionPointsWeb.ReviewLive do
   attr :role, :string, required: true, doc: "the data-role hook tests select on"
   attr :icon, :string, required: true
   attr :empty, :boolean, default: false, doc: "styles the chip as a stated absence"
+  attr :flagged, :boolean, default: false, doc: "styles the chip as something to look at"
   slot :inner_block, required: true
 
   defp chip(assigns) do
     ~H"""
     <span
       data-role={@role}
+      data-past-due={@flagged}
       class={[
-        "inline-flex items-center gap-1.5 rounded-field border border-base-300 px-2 py-0.5 text-xs",
-        (@empty && "border-dashed text-base-content/65") || "text-base-content/70"
+        "inline-flex items-center gap-1.5 rounded-field border px-2 py-0.5 text-xs",
+        cond do
+          @flagged -> "border-warning/50 bg-warning/10 text-base-content/80"
+          @empty -> "border-base-300 border-dashed text-base-content/65"
+          true -> "border-base-300 text-base-content/70"
+        end
       ]}
     >
-      <.icon name={@icon} class={if @empty, do: "size-3", else: "size-3 text-base-content/65"} />
+      <.icon
+        name={@icon}
+        class={
+          cond do
+            @flagged -> "size-3 text-warning"
+            @empty -> "size-3"
+            true -> "size-3 text-base-content/65"
+          end
+        }
+      />
       {render_slot(@inner_block)}
     </span>
     """
   end
+
+  # One Action Point's due date — the whole of it, present or absent, flagged
+  # or not. A resolved date that has already passed is shown and marked, never
+  # cleared and never blocking: our guess about the deadline is the one place
+  # where being wrong reaches out and touches colleagues who never used this
+  # product, since an overdue task fires whatever the workspace notifies on.
+  # The user sees the flag and decides — keep it, edit it, or clear it.
+  attr :action_point, :map, required: true
+  attr :today, Date, required: true, doc: "the visitor's own today, read fresh at Review"
+
+  defp due_date_field(assigns) do
+    assigns = assign(assigns, :flag?, flag_past_due?(assigns.action_point, assigns.today))
+
+    ~H"""
+    <%= cond do %>
+      <% @flag? -> %>
+        <.chip role="due-date" icon="hero-exclamation-triangle-micro" flagged>
+          {Calendar.strftime(@action_point.due_date, "%-d %b %Y")}
+          <span class="font-medium">· already passed</span>
+        </.chip>
+      <% @action_point.due_date -> %>
+        <.chip role="due-date" icon="hero-calendar-micro">
+          {Calendar.strftime(@action_point.due_date, "%-d %b %Y")}
+        </.chip>
+      <% true -> %>
+        <%!-- A missing due date is stated, not left blank: the model heard no
+        date, which is different from nobody having looked. --%>
+        <.chip role="no-due-date" icon="hero-calendar-micro" empty>No due date</.chip>
+    <% end %>
+    """
+  end
+
+  # Whether one Action Point's due date is worth flagging. One predicate for
+  # the chip and the notice above it, so the screen can never warn in one
+  # place and stay quiet in the other. Only what a Push would actually act on
+  # is flagged: a rejected Action Point creates nothing, and a pushed one is
+  # past being warned about — its task is already in the sink.
+  defp flag_past_due?(action_point, today) do
+    action_point.status == :accepted and is_nil(action_point.sink_issue_id) and
+      past_due?(action_point.due_date, today)
+  end
+
+  # A resolved due date is past when it falls before the visitor's today —
+  # today itself is not late. Compared against today and never against the
+  # Meeting Date: a deadline in the past relative to a three-week-old meeting
+  # is exactly what we would expect, and is not the signal worth flagging.
+  defp past_due?(nil, _today), do: false
+  defp past_due?(%Date{} = due_date, %Date{} = today), do: Date.before?(due_date, today)
 
   # One Action Point's assignee: a live picker once the sink is connected and
   # reachable and the Action Point isn't pushed yet, otherwise a static chip
@@ -737,9 +804,16 @@ defmodule ActionPointsWeb.ReviewLive do
 
     extraction = Meetings.get_extraction!(id, session["anon_session_token"])
 
+    local_date = LocalDate.from_connect_params(socket)
+
     {:ok,
      socket
-     |> assign(:local_date, LocalDate.from_connect_params(socket))
+     |> assign(:local_date, local_date)
+     # Today is read here, at Review, from the visitor's own browser — never
+     # derived from the stored Meeting Date. Review can happen days after the
+     # Extraction, and from a different calendar than the server's, so the
+     # only "today" worth flagging against is the one on the visitor's wall.
+     |> assign(:today, local_date || Date.utc_today())
      |> assign(:hierarchy_supported?, Sinks.hierarchy_supported?())
      |> assign_resolved_extraction(connected?(socket), extraction)}
   end
@@ -1140,11 +1214,18 @@ defmodule ActionPointsWeb.ReviewLive do
       Enum.map(action_points, &%{id: &1.id, title: &1.title, status: &1.status})
     )
     |> assign(:pushed_action_points, Enum.filter(action_points, & &1.sink_issue_id))
+    |> assign(:past_due_count, past_due_count(action_points, socket.assigns.today))
     |> assign(:subtask_count, Enum.count(action_points, & &1.parent_id))
     |> assign(
       :eligible_parents,
       Enum.filter(action_points, &(is_nil(&1.parent_id) and &1.status == :accepted))
     )
+  end
+
+  # How many cards are carrying the flag — what decides whether the notice
+  # explaining it is worth showing at all.
+  defp past_due_count(action_points, today) do
+    Enum.count(action_points, &flag_past_due?(&1, today))
   end
 
   # The relations a Push still owes the sink — what keeps the Push button
