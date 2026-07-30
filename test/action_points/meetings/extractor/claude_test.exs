@@ -134,8 +134,12 @@ defmodule ActionPoints.Meetings.Extractor.ClaudeTest do
       {%{"kind" => "weekday", "weekday" => "friday", "modifier" => "this"},
        %{kind: :weekday, weekday: :friday, modifier: :this}},
       {%{"kind" => "relative_day", "offset" => 1}, %{kind: :relative_day, offset: 1}},
+      # A date said in part keeps the parts that were said and nothing more —
+      # completing it is the application's, against the Meeting Date.
       {%{"kind" => "absolute", "year" => nil, "month" => 3, "day" => 3},
        %{kind: :absolute, year: nil, month: 3, day: 3}},
+      {%{"kind" => "absolute", "year" => nil, "month" => nil, "day" => 12},
+       %{kind: :absolute, year: nil, month: nil, day: 12}},
       {%{"kind" => "span_end", "modifier" => "next", "unit" => "month"},
        %{kind: :span_end, modifier: :next, unit: :month}},
       {%{"kind" => "duration", "unit" => "week", "count" => 2},
@@ -226,6 +230,10 @@ defmodule ActionPoints.Meetings.Extractor.ClaudeTest do
       %{"kind" => "weekday", "weekday" => "someday", "modifier" => nil},
       %{"kind" => "weekday", "weekday" => "monday", "modifier" => "last"},
       %{"kind" => "relative_day", "offset" => "tomorrow"},
+      # A year is only ever spoken after its month, so a year beside an unsaid
+      # month is a date no meeting produced.
+      %{"kind" => "absolute", "year" => 2027, "month" => nil, "day" => 3},
+      %{"kind" => "absolute", "year" => nil, "month" => 3, "day" => "3rd"},
       %{"kind" => "duration", "unit" => "fortnight", "count" => 1},
       # A quantifier outside the closed lexicon is not decoded into an atom the
       # resolver would then have to reject — it never becomes one.
