@@ -41,14 +41,19 @@ defmodule ActionPoints.Meetings.Extractor.ClaudeTest do
                     "title" => "Send the Q3 report",
                     "description" => "Priya will send the Q3 report.",
                     "assignee_guess" => "Priya",
-                    "due_date" => "2026-07-31",
+                    "timing" => %{
+                      "kind" => "absolute",
+                      "year" => 2026,
+                      "month" => 7,
+                      "day" => 31
+                    },
                     "quotes" => ["I'll send the Q3 report by July 31st 2026."]
                   },
                   %{
                     "title" => "Circle back on hiring",
                     "description" => "Vague commitment to revisit hiring.",
                     "assignee_guess" => nil,
-                    "due_date" => nil
+                    "timing" => nil
                   }
                 ]
               })
@@ -64,16 +69,137 @@ defmodule ActionPoints.Meetings.Extractor.ClaudeTest do
              title: "Send the Q3 report",
              description: "Priya will send the Q3 report.",
              assignee_guess: "Priya",
-             due_date: ~D[2026-07-31],
+             timing: %{kind: :absolute, year: 2026, month: 7, day: 31},
              quotes: ["I'll send the Q3 report by July 31st 2026."]
            }
 
     assert second.assignee_guess == nil
-    assert second.due_date == nil
+    assert second.timing == nil
 
     # The schema demands quotes, but a missing key parses as none — quote
     # trouble must never cost the user their Action Points.
     assert second.quotes == []
+  end
+
+  test "parses each timing kind into the tagged union" do
+    timings = [
+      {%{"kind" => "weekday", "weekday" => "wednesday", "modifier" => nil},
+       %{kind: :weekday, weekday: :wednesday, modifier: nil}},
+      {%{"kind" => "weekday", "weekday" => "monday", "modifier" => "next"},
+       %{kind: :weekday, weekday: :monday, modifier: :next}},
+      {%{"kind" => "weekday", "weekday" => "friday", "modifier" => "this"},
+       %{kind: :weekday, weekday: :friday, modifier: :this}},
+      {%{"kind" => "relative_day", "offset" => 1}, %{kind: :relative_day, offset: 1}},
+      {%{"kind" => "absolute", "year" => nil, "month" => 3, "day" => 3},
+       %{kind: :absolute, year: nil, month: 3, day: 3}},
+      {%{"kind" => "span_end", "modifier" => "next", "unit" => "month"},
+       %{kind: :span_end, modifier: :next, unit: :month}},
+      {%{"kind" => "duration", "unit" => "week", "count" => 2},
+       %{kind: :duration, unit: :week, count: 2}},
+      {%{"kind" => "vague"}, %{kind: :vague}}
+    ]
+
+    stub_response(fn conn ->
+      Req.Test.json(conn, %{
+        "stop_reason" => "end_turn",
+        "content" => [
+          %{
+            "type" => "text",
+            "text" =>
+              Jason.encode!(%{
+                "meeting_date" => nil,
+                "action_points" =>
+                  Enum.map(timings, fn {json, _expected} ->
+                    %{
+                      "title" => "A task",
+                      "description" => "",
+                      "assignee_guess" => nil,
+                      "timing" => json,
+                      "quotes" => []
+                    }
+                  end)
+              })
+          }
+        ]
+      })
+    end)
+
+    assert {:ok, %{action_points: action_points}} = Claude.extract(@transcript)
+
+    for {{_json, expected}, attrs} <- Enum.zip(timings, action_points) do
+      assert attrs.timing == expected
+    end
+  end
+
+  test "timing the schema should have prevented is no classification, not a failed Extraction" do
+    malformed = [
+      %{"kind" => "weekday", "weekday" => "someday", "modifier" => nil},
+      %{"kind" => "weekday", "weekday" => "monday", "modifier" => "last"},
+      %{"kind" => "relative_day", "offset" => "tomorrow"},
+      %{"kind" => "duration", "unit" => "fortnight", "count" => 1},
+      %{"kind" => "eventually"},
+      "by Wednesday"
+    ]
+
+    stub_response(fn conn ->
+      Req.Test.json(conn, %{
+        "stop_reason" => "end_turn",
+        "content" => [
+          %{
+            "type" => "text",
+            "text" =>
+              Jason.encode!(%{
+                "meeting_date" => nil,
+                "action_points" =>
+                  Enum.map(malformed, fn timing ->
+                    %{
+                      "title" => "A task",
+                      "description" => "",
+                      "assignee_guess" => nil,
+                      "timing" => timing,
+                      "quotes" => []
+                    }
+                  end)
+              })
+          }
+        ]
+      })
+    end)
+
+    assert {:ok, %{action_points: action_points}} = Claude.extract(@transcript)
+    assert length(action_points) == length(malformed)
+    assert Enum.all?(action_points, &is_nil(&1.timing))
+  end
+
+  test "the prompt carries no date, time, or timezone — classification is anchor-independent" do
+    stub_response(fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      payload = Jason.decode!(body)
+      send(self(), {:request, payload})
+
+      Req.Test.json(conn, %{
+        "stop_reason" => "end_turn",
+        "content" => [
+          %{
+            "type" => "text",
+            "text" => Jason.encode!(%{"meeting_date" => nil, "action_points" => []})
+          }
+        ]
+      })
+    end)
+
+    assert {:ok, _result} = Claude.extract(@transcript)
+    assert_received {:request, payload}
+    system = payload["system"]
+
+    # No calendar date of any shape — in particular not today's — no clock
+    # time, and no timezone. The prompt is static: the same Transcript always
+    # produces the same request, whenever it is sent.
+    refute system =~ ~r/\d{4}-\d{2}-\d{2}/
+    refute system =~ ~r/\b(19|20)\d{2}\b/
+    refute system =~ ~r/\d{1,2}:\d{2}/
+    refute system =~ ~r/\b(current date|UTC|GMT|timezone|time zone)\b/i
+    refute system =~ Date.to_iso8601(Date.utc_today())
   end
 
   test "a response stating no meeting date parses as none" do
