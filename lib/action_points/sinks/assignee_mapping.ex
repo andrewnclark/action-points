@@ -25,10 +25,16 @@ defmodule ActionPoints.Sinks.AssigneeMapping do
   end
 
   @doc """
-  Normalises a guessed name into the mapping's lookup key: trimmed and
-  lower-cased, the same fold the pre-Review name matcher used to use.
+  Folds a name for comparison: trimmed and lower-cased. The one fold, wherever
+  a name is compared — the mapping's lookup key, and both sides of the Task
+  Sink member name match.
+
+  Growing it (collapsing internal whitespace, folding accents) moves those
+  paths together, which is the point of it living here. Resolution is one
+  decision, and half of it folding differently would just make a guess match
+  on one path and silently never on the other.
   """
-  def normalize(guess) when is_binary(guess), do: guess |> String.trim() |> String.downcase()
+  def normalize(name) when is_binary(name), do: name |> String.trim() |> String.downcase()
 
   def changeset(mapping, attrs) do
     mapping
