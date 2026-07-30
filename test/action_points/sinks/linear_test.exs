@@ -221,6 +221,49 @@ defmodule ActionPoints.Sinks.LinearTest do
     assert {:ok, %{identifier: "ENG-2"}} = Linear.push_task(@credentials, "team-1", task)
   end
 
+  test "create_relation creates a blocks relation from the blocking issue's side" do
+    stub_response(fn conn ->
+      {conn, payload} = decode_request(conn)
+
+      assert payload["query"] =~ "issueRelationCreate"
+
+      # Our edge is "blocked waits on blocking"; Linear's vocabulary is
+      # "issueId blocks relatedIssueId" — the direction must flip here.
+      assert payload["variables"]["input"] == %{
+               "issueId" => "issue-blocking",
+               "relatedIssueId" => "issue-blocked",
+               "type" => "blocks"
+             }
+
+      Req.Test.json(conn, %{
+        "data" => %{
+          "issueRelationCreate" => %{
+            "success" => true,
+            "issueRelation" => %{"id" => "relation-1"}
+          }
+        }
+      })
+    end)
+
+    assert Linear.create_relation(@credentials, %{
+             blocked_issue_id: "issue-blocked",
+             blocking_issue_id: "issue-blocking"
+           }) == {:ok, %{id: "relation-1"}}
+  end
+
+  test "create_relation reports an unsuccessful mutation as an api error" do
+    stub_response(fn conn ->
+      Req.Test.json(conn, %{
+        "data" => %{"issueRelationCreate" => %{"success" => false, "issueRelation" => nil}}
+      })
+    end)
+
+    assert Linear.create_relation(@credentials, %{
+             blocked_issue_id: "issue-blocked",
+             blocking_issue_id: "issue-blocking"
+           }) == {:error, :api_error}
+  end
+
   test "push_task omits nil assignee and due date rather than sending nulls" do
     stub_response(fn conn ->
       {conn, payload} = decode_request(conn)

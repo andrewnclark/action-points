@@ -21,6 +21,12 @@ defmodule ActionPoints.Meetings.Extractor do
           # model, verified against the Transcript only when the Extraction
           # finalises.
           required(:quotes) => [String.t()],
+          # Proposed Blockers: the 1-based positions, in this same output, of
+          # the sibling Action Points this one waits on — proposed only when
+          # the transcript states the ordering. Sanitised (self-references,
+          # cycles, duplicates, dangling positions) when the Extraction
+          # finalises.
+          required(:blocked_by) => [pos_integer()],
           # A Subtask's parent, as the sibling's 1-based position in this
           # result — proposed only when the meeting itself broke the
           # deliverable down aloud. Self, dangling, and deeper-than-one-level

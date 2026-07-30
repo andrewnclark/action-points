@@ -38,6 +38,10 @@ defmodule ActionPoints.Meetings.ActionPoint do
 
     belongs_to :extraction, ActionPoints.Meetings.Extraction
 
+    # Blockers: the blocked-by relations this Action Point waits on, each
+    # pointing at a sibling of the same Extraction and only ever a sibling.
+    has_many :blockers, ActionPoints.Meetings.Blocker, preload_order: [asc: :id]
+
     # A Subtask's parent (see CONTEXT.md): another Action Point of the same
     # Extraction, exactly one level deep — set only when the meeting itself
     # broke the deliverable down aloud, and freely restructured at Review.

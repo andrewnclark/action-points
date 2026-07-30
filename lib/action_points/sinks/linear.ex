@@ -85,6 +85,34 @@ defmodule ActionPoints.Sinks.Linear do
     end
   end
 
+  # Linear's relation vocabulary is "A blocks B", so the blocked-by edge is
+  # created from the blocking issue's side: issueId blocks relatedIssueId.
+  @impl true
+  def create_relation(credentials, relation) do
+    mutation = """
+    mutation IssueRelationCreate($input: IssueRelationCreateInput!) {
+      issueRelationCreate(input: $input) { success issueRelation { id } }
+    }
+    """
+
+    input = %{
+      "issueId" => relation.blocking_issue_id,
+      "relatedIssueId" => relation.blocked_issue_id,
+      "type" => "blocks"
+    }
+
+    case query(credentials, mutation, %{"input" => input}) do
+      {:ok, %{"issueRelationCreate" => %{"success" => true, "issueRelation" => %{"id" => id}}}} ->
+        {:ok, %{id: id}}
+
+      {:ok, _data} ->
+        {:error, :api_error}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   defp query(%{api_key: api_key}, document, variables) do
     request_options =
       [

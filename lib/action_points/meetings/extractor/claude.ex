@@ -47,6 +47,12 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
     against it and a paraphrase, trimmed filler, or corrected typo is
     silently discarded. Prefer one or two quotes that carry a decision,
     constraint, or commitment over three weak ones; an empty list is fine.
+  - blocked_by: the positions (1-based, in this same action_points list) of
+    the other action points this one must wait for, but only when the
+    transcript states the dependency — "Bob can't deploy until Alice
+    finishes the migration", "once that's done", "after the review lands".
+    Tasks that merely share a topic, a person, or a deadline are not
+    dependencies. Most action points have none: an empty list is the norm.
   - parent: null almost always. Set it — to another action point's 1-based
     position in your own list — only when the meeting itself broke a named
     deliverable into pieces aloud ("the onboarding revamp: Alice takes the
@@ -169,13 +175,25 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
             # whole request. The cap is the prompt's to ask for and
             # `GroundingQuote.verify/2`'s to enforce.
             "quotes" => %{"type" => "array", "items" => %{"type" => "string"}},
+            # Sibling positions this Action Point waits on. Anything the
+            # schema can't say — position bounds, no self-references, no
+            # cycles — is `Blocker.sanitise/1`'s to enforce at finalise.
+            "blocked_by" => %{"type" => "array", "items" => %{"type" => "integer"}},
             # A Subtask's parent by 1-based position; the finalise-time
             # hygiene in Meetings enforces the one-level cap and drops
             # self/dangling references, so a bad value can never fail the
             # Extraction.
             "parent" => %{"anyOf" => [%{"type" => "integer"}, %{"type" => "null"}]}
           },
-          "required" => ["title", "description", "assignee_guess", "timing", "quotes", "parent"],
+          "required" => [
+            "title",
+            "description",
+            "assignee_guess",
+            "timing",
+            "quotes",
+            "parent",
+            "blocked_by"
+          ],
           "additionalProperties" => false
         }
       }
@@ -243,7 +261,8 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
       assignee_guess: action_point["assignee_guess"],
       timing: parse_timing(action_point["timing"]),
       quotes: action_point["quotes"] || [],
-      parent: parse_parent(action_point["parent"])
+      parent: parse_parent(action_point["parent"]),
+      blocked_by: action_point["blocked_by"] || []
     }
   end
 
