@@ -111,9 +111,9 @@ defmodule ActionPoints.Meetings.Timing do
   # the parts the meeting left out are supplied here, and always forward: a
   # meeting cannot set a deadline in its own past, so the earliest completion
   # that is not behind the meeting date is the one it meant.
-  def resolve(%{kind: :absolute, day: day} = classification, %Date{} = meeting_date)
+  def resolve(%{kind: :absolute, year: year, month: month, day: day}, %Date{} = meeting_date)
       when is_integer(day) do
-    complete(Map.get(classification, :year), Map.get(classification, :month), day, meeting_date)
+    complete(year, month, day, meeting_date)
   end
 
   # "Next Wednesday": that weekday in the calendar week following the
@@ -225,7 +225,7 @@ defmodule ActionPoints.Meetings.Timing do
   # reaching out to a leap year nobody could have meant.
   defp complete(nil, month, day, %Date{} = meeting_date) when is_integer(month) do
     Enum.find_value([meeting_date.year, meeting_date.year + 1], fn year ->
-      forward(Date.new(year, month, day), meeting_date)
+      not_behind(Date.new(year, month, day), meeting_date)
     end)
   end
 
@@ -235,8 +235,8 @@ defmodule ActionPoints.Meetings.Timing do
   # in the calendar is longer than February's.
   defp complete(nil, nil, day, %Date{} = meeting_date) do
     Enum.find_value(0..2, fn ahead ->
-      month = add_months(meeting_date, ahead)
-      forward(Date.new(month.year, month.month, day), meeting_date)
+      candidate = add_months(meeting_date, ahead)
+      not_behind(Date.new(candidate.year, candidate.month, day), meeting_date)
     end)
   end
 
@@ -245,8 +245,13 @@ defmodule ActionPoints.Meetings.Timing do
   # malformed.
   defp complete(_year, _month, _day, %Date{}), do: nil
 
-  defp forward({:ok, %Date{} = date}, %Date{} = meeting_date), do: reject_past(date, meeting_date)
-  defp forward({:error, _reason}, %Date{}), do: nil
+  # A candidate completion: the date it names when the calendar holds it and
+  # the meeting has not already passed it, and nothing otherwise.
+  defp not_behind({:ok, %Date{} = date}, %Date{} = meeting_date) do
+    reject_past(date, meeting_date)
+  end
+
+  defp not_behind({:error, _reason}, %Date{}), do: nil
 
   # The final calendar day of the month or quarter `ahead` spans on from the
   # meeting's own — `ahead` counting in that same unit. Month arithmetic runs

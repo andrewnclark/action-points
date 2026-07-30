@@ -427,6 +427,11 @@ defmodule ActionPoints.Meetings.TimingTest do
     test "a kind missing the fields it needs pins nothing rather than raising" do
       assert Timing.resolve(%{kind: :absolute}, @tuesday) == nil
       assert Timing.resolve(%{kind: :absolute, year: 2026}, @tuesday) == nil
+
+      # An absent part is not an unsaid one: completion reads the nulls an
+      # adapter put there, never a field it forgot to send.
+      assert Timing.resolve(%{kind: :absolute, day: 3}, @tuesday) == nil
+
       assert Timing.resolve(%{kind: :absolute, year: 2026, month: 13, day: 40}, @tuesday) == nil
       assert Timing.resolve(%{kind: :absolute, year: 2026, month: "07", day: 1}, @tuesday) == nil
       assert Timing.resolve(%{kind: :absolute, year: nil, month: 3, day: "3"}, @tuesday) == nil
