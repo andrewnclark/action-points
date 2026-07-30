@@ -43,7 +43,7 @@ The day the meeting happened, recorded on the Extraction and stated at Review. E
 _Avoid_: date, timestamp, upload date (the upload date is only ever the assumed fallback)
 
 **Timing Classification**:
-The Extraction's report of what kind of timing language the meeting used about an Action Point's deadline — a named weekday, a stated date, "tomorrow", "soon" — never a computed date. The model classifies; the application resolves the classification against the Meeting Date into a due date, or into none when the language pins no date ("vague").
+The Extraction's report of what kind of timing language the meeting used about an Action Point's deadline — a named weekday, a stated date, "tomorrow", "soon" — never a computed date. The model classifies; the application resolves the classification against the Meeting Date into a due date, or into none — when the language pins no date ("vague"), or when a resolution rule declines because the date it would pin is not one a deliverable can have. Resolved due dates land on a _working day_, Monday to Friday: these are work deliverables, and a task dated to a Sunday is visibly a machine's answer.
 _Avoid_: deadline (the language spoken in the meeting), due date (the resolved result)
 
 **Grounding Quote**:

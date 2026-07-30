@@ -14,9 +14,9 @@ defmodule ActionPoints.Meetings.Timing do
   date or `nil` out. `nil` is a real answer: an unpinnable or not-yet-resolved
   classification produces an Action Point with no due date, never a guess.
 
-  This module currently resolves `absolute` (complete dates), `weekday`, and
-  `relative_day`. `span_end`, `duration`, and partial absolute dates are later
-  tickets and resolve to `nil` until theirs land.
+  This module currently resolves `absolute` (complete dates), `weekday`,
+  `relative_day`, and `span_end`. `duration` and partial absolute dates are
+  later tickets and resolve to `nil` until theirs land.
   """
 
   @typedoc "A day of the week, as the classification names it."
@@ -90,7 +90,74 @@ defmodule ActionPoints.Meetings.Timing do
     Date.add(meeting_date, offset)
   end
 
-  # `vague` pins nothing by definition; `span_end` and `duration` pin nothing
-  # until their tickets land the rules.
-  def resolve(%{kind: kind}, %Date{}) when kind in [:vague, :span_end, :duration], do: nil
+  # "By the end of the week": Friday, not Sunday. These are work deliverables,
+  # and a task dated to a Sunday is visibly a machine's answer — one obviously
+  # wrong date corrodes trust in every other date on the Review screen. So a
+  # span resolves to the last *working* day it contains.
+  #
+  # A weekend meeting's own week has no working days left in it, and the
+  # backward reading is impossible: nobody says "by the end of the week" on a
+  # Saturday meaning the Friday just gone. So "this week" said on a weekend is
+  # the working week ahead — which collapses it onto "next week", exactly as
+  # the bare and `next` forms of a weekday collapse when the meeting falls
+  # late in the week. The bump is `this`-only: the weekend is the tail of the
+  # week it ends, so "next week" already names the week beginning Monday.
+  def resolve(%{kind: :span_end, modifier: modifier, unit: :week}, %Date{} = meeting_date) do
+    weeks = if modifier == :next or weekend?(meeting_date), do: 1, else: 0
+
+    meeting_date
+    |> Date.beginning_of_week()
+    |> Date.add(7 * weeks + 4)
+  end
+
+  def resolve(%{kind: :span_end, modifier: modifier, unit: unit}, %Date{} = meeting_date)
+      when unit in [:month, :quarter] do
+    meeting_date
+    |> span_last_day(unit, if(modifier == :next, do: 1, else: 0))
+    |> last_working_day()
+    |> reject_past(meeting_date)
+  end
+
+  # `vague` pins nothing by definition; `duration` pins nothing until its
+  # ticket lands the rules. A `span_end` naming a unit this module does not
+  # know pins nothing rather than crashing — the same posture as an impossible
+  # absolute date: a malformed classification must never cost the user their
+  # Action Point.
+  def resolve(%{kind: kind}, %Date{}) when kind in [:vague, :duration, :span_end], do: nil
+
+  # The final calendar day of the month or quarter `ahead` spans on from the
+  # meeting's own — `ahead` counting in that same unit. Month arithmetic runs
+  # on a month count rather than on dates, so December rolls into January of
+  # the next year with no special case and no invalid intermediate date.
+  defp span_last_day(%Date{} = date, :month, ahead) do
+    date
+    |> add_months(ahead)
+    |> Date.end_of_month()
+  end
+
+  defp span_last_day(%Date{} = date, :quarter, ahead) do
+    date.year
+    |> Date.new!(div(date.month - 1, 3) * 3 + 1, 1)
+    |> add_months(3 * ahead + 2)
+    |> Date.end_of_month()
+  end
+
+  defp add_months(%Date{} = date, count) do
+    months = date.year * 12 + (date.month - 1) + count
+    Date.new!(div(months, 12), rem(months, 12) + 1, 1)
+  end
+
+  defp last_working_day(%Date{} = date) do
+    if weekend?(date), do: last_working_day(Date.add(date, -1)), else: date
+  end
+
+  defp weekend?(%Date{} = date), do: Date.day_of_week(date) > 5
+
+  # A month or quarter whose working days are already spent — only reachable
+  # from a weekend meeting sitting past its last working day — pins nothing.
+  # There is no working day left in the span the meeting named, and a deadline
+  # before the meeting that set it is worse than no deadline at all.
+  defp reject_past(%Date{} = resolved, %Date{} = meeting_date) do
+    if Date.compare(resolved, meeting_date) == :lt, do: nil, else: resolved
+  end
 end
