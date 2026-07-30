@@ -12,20 +12,6 @@ defmodule ActionPointsWeb.HomeLive do
   alias ActionPoints.Meetings.Transcript
   alias ActionPointsWeb.LocalDate
 
-  # A canned product-team standup, for visitors with no transcript to hand.
-  @sample_transcript """
-  Maya: Right, quick one today. Where are we on the launch?
-  Dan: Landing page is done bar the pricing table. I'll have the pricing table finished by Thursday.
-  Maya: Good. Priya, the onboarding emails?
-  Priya: Drafted. I still owe the welcome email a proper subject line — I'll send the final versions to Maya for sign-off tomorrow.
-  Maya: Please. And someone needs to chase legal about the updated terms before we flip the switch.
-  Dan: I can take that. I'll email Sofia in legal today and ask for a yes/no by Friday.
-  Priya: One more thing — the signup form still breaks on Safari. Jonas said he'd look but he's out this week.
-  Maya: Then let's not wait. Dan, can you pick up the Safari signup bug once the pricing table's out the door?
-  Dan: Yep, fine.
-  Maya: I'll book the go/no-go call for Monday morning and send the invite round this afternoon. Anything else? No? Good — thanks all.
-  """
-
   @impl true
   def render(assigns) do
     ~H"""
@@ -152,7 +138,6 @@ defmodule ActionPointsWeb.HomeLive do
               type="button"
               id="load-sample"
               phx-click="load_sample"
-              phx-disable-with="Loading the sample…"
               class="btn btn-ghost btn-sm font-normal text-base-content/70"
             >
               No transcript to hand? Try the sample meeting
@@ -299,11 +284,21 @@ defmodule ActionPointsWeb.HomeLive do
     start_extraction(socket, attrs, filename)
   end
 
+  # The sample meeting is authored, not run: no model call, no Credit, no
+  # spinner, and nothing counted against the Demo's cap (issue #94). It lands
+  # on a finished Review the same way a real Extraction eventually does.
   def handle_event("load_sample", _params, socket) do
-    start_extraction(socket, %{"transcript_text" => @sample_transcript})
+    extraction =
+      Meetings.create_sample_extraction(
+        socket.assigns.current_scope,
+        socket.assigns.session_token,
+        local_date: socket.assigns.local_date
+      )
+
+    {:noreply, push_navigate(socket, to: ~p"/review/#{extraction}")}
   end
 
-  defp start_extraction(socket, attrs, filename \\ nil) do
+  defp start_extraction(socket, attrs, filename) do
     socket = assign(socket, :rate_limited?, false)
 
     case Meetings.create_extraction(

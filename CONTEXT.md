@@ -34,6 +34,10 @@ _Avoid_: integration, destination, provider
 The anonymous run of the pipeline from the landing page: a real Extraction and Review, keyed to the visitor's session instead of an account. Rate-limited rather than charged; signup is required only at Push, and the Demo's Review carries over through it.
 _Avoid_: preview, free preview, trial
 
+**Sample Meeting**:
+The one Extraction we author rather than run: a fictional Transcript and the Action Points that go with it, written down so the landing page can show the product working without a model call, a Credit, or a claim on the Demo's rate limit. Its content is chosen to put every state Review can show on the page at once — Blockers, a nesting, a Timing Quote with a date and one without, a deadline already past, an Action Point nobody was named for. It is a real Extraction row curated on the real Review screen; only the meeting is invented, and the screen says so. Everything else the visitor does with it — accepting, editing, Pushing — is the product.
+_Avoid_: demo (the Demo is a real run of the pipeline), example, dummy data
+
 **Assignee Mapping**:
 A remembered link from a guessed name to one Task Sink user, scoped to a Sink Connection (it dies with the connection). Born during Review the first time a name is resolved; thereafter that name resolves automatically. Push assigns only what Review resolved — nothing is matched silently at Push.
 _Avoid_: user sync, alias, name matching
