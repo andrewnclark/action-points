@@ -6,6 +6,7 @@ defmodule ActionPointsWeb.HomeLive do
 
   use ActionPointsWeb, :live_view
 
+  alias ActionPoints.Billing
   alias ActionPoints.Meetings
   alias ActionPoints.Meetings.Extraction
   alias ActionPoints.Meetings.Transcript
@@ -218,23 +219,26 @@ defmodule ActionPointsWeb.HomeLive do
         size a Pack. Same contrast, correct vocabulary. --%>
         <p class="mt-1.5 mb-6 text-xl tracking-[-0.02em]">Buy Credits, not seats.</p>
         <div class="grid gap-4 sm:grid-cols-2">
-          <div class="rounded-box border border-base-300 bg-base-200 p-5">
+          <div id="pricing-free" class="rounded-box border border-base-300 bg-base-200 p-5">
             <span class="text-[11px] tracking-[0.08em] text-base-content/65 uppercase">
               Free Meeting
             </span>
-            <p class="mt-2.5 text-3xl font-semibold tracking-[-0.03em]">£0</p>
+            <p class="mt-2.5 text-3xl font-semibold tracking-[-0.03em]">{@free_price}</p>
             <p class="mt-2 text-base-content/70">
               Every new account starts with one Credit, so your first meeting costs nothing.
             </p>
           </div>
-          <div class="rounded-box border border-primary/45 bg-linear-to-b from-primary/[0.07] to-transparent to-62% bg-base-200 p-5">
+          <div
+            id="pricing-pack"
+            class="rounded-box border border-primary/45 bg-linear-to-b from-primary/[0.07] to-transparent to-62% bg-base-200 p-5"
+          >
             <span class="text-[11px] tracking-[0.08em] text-base-content/65 uppercase">
               Pack
             </span>
             <p class="mt-2.5 text-3xl font-semibold tracking-[-0.03em]">
-              £5
+              {@pack_price}
               <span class="text-sm font-normal tracking-normal text-base-content/70">
-                / 15 meetings
+                / {@pack_credits} meetings
               </span>
             </p>
             <p class="mt-2 text-base-content/70">
@@ -254,8 +258,16 @@ defmodule ActionPointsWeb.HomeLive do
 
   @impl true
   def mount(_params, session, socket) do
+    # Pricing is config (ADR-0003), so the page quotes what the checkout charges
+    # rather than restating it — including the Free Meeting's zero, which is only
+    # "£0" for as long as the Pack is priced in pounds.
+    pack = Billing.pack()
+
     {:ok,
      socket
+     |> assign(:pack_credits, pack.credits)
+     |> assign(:pack_price, Billing.format_price(pack))
+     |> assign(:free_price, Billing.format_price(%{pack | price_pence: 0}))
      |> assign(:session_token, session["anon_session_token"])
      |> assign(:peer_ip, peer_ip(socket))
      |> assign(:local_date, LocalDate.from_connect_params(socket))
