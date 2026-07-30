@@ -26,7 +26,7 @@ Completion: healthy Postgres on your own host port, `deps/` fetched, both env va
 
 Follow `/implement` for issue #N: `/tdd` at pre-agreed seams, CONTEXT.md vocabulary, ADRs in `docs/adr/` respected.
 
-Run any review pass **inline in your own context** — never spawn background sub-agents and stop to wait for them; their completion signals route to the orchestrator, not to you, and a turn ended "waiting" is a stall.
+Run any review pass through **synchronous (foreground) sub-agents** — the fresh context window is the point of a sub-agent reviewer, so keep it, but the spawn must block until the report returns. Never spawn reviewers in the background and stop to wait: their completion signals route to the orchestrator, not to you, and a turn ended "waiting" is a stall.
 
 Tests run on the host against your own forwarded port — `config/test.exs` reads `DB_PORT` (default 5433), and the `mix test` alias creates and migrates `action_points_test` in your container on first run; there is no shared database to trample.
 
