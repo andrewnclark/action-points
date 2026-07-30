@@ -126,4 +126,36 @@ defmodule ActionPointsWeb.LandingPageTest do
 
     refute has_element?(home, "#rate-limit-notice")
   end
+
+  # A visitor is quoted a price on the way in and charged one at the till. ADR-0003
+  # makes the Pack a config value that changes freely, so the quote has to be read
+  # from it rather than restated in the markup.
+  describe "the Pack quoted in Pricing" do
+    test "states the configured price and Credit count, non-round prices included",
+         %{conn: conn} do
+      repriced_pack(credits: 40, price_pence: 1250, currency: "gbp")
+
+      {:ok, home, _html} = live(conn, ~p"/")
+
+      assert has_element?(home, "#pricing-pack", "£12.50")
+      assert has_element?(home, "#pricing-pack", "/ 40 meetings")
+    end
+
+    # The Free Meeting costs nothing in whatever the Pack is priced in — a zero
+    # still carries a currency, so it cannot be a literal either.
+    test "the Free Meeting is free in the Pack's currency", %{conn: conn} do
+      repriced_pack(credits: 40, price_pence: 1250, currency: "usd")
+
+      {:ok, home, _html} = live(conn, ~p"/")
+
+      assert has_element?(home, "#pricing-free", "USD 0")
+      assert has_element?(home, "#pricing-pack", "USD 12.50")
+    end
+  end
+
+  defp repriced_pack(pack) do
+    original = Application.fetch_env!(:action_points, :pack)
+    Application.put_env(:action_points, :pack, pack)
+    on_exit(fn -> Application.put_env(:action_points, :pack, original) end)
+  end
 end
