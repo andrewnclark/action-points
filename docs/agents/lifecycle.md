@@ -43,11 +43,11 @@ Completion: full suite green.
 
 ## Deliver
 
-One task, one commit, no attribution. Push the branch and open the PR:
+One task, one commit, no attribution. The PR body is the durable record — a later reviewer or reconciler reads it when your context is gone, so `Closes #N` alone is not enough. After that line, cover: what was built against each part of the spec; every judgement call or deviation and its reasoning; any pattern you established that a sibling ticket might also touch; anything deliberately deferred and why. Then push the branch and open the PR:
 
 ```bash
 git push -u origin N-<slug>
-gh pr create --base main --title "<issue title>" --body "Closes #N"
+gh pr create --base main --title "<issue title>" --body "<Closes #N + the record above>"
 ```
 
 ## Teardown
