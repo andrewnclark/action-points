@@ -180,12 +180,45 @@ defmodule ActionPoints.Sinks.LinearTest do
       title: "Send the Q3 report",
       description: "Priya will send the Q3 report.",
       assignee_id: "user-1",
-      due_date: ~D[2026-07-31]
+      due_date: ~D[2026-07-31],
+      parent_id: nil
     }
 
     assert Linear.push_task(@credentials, "team-1", task) ==
              {:ok,
               %{id: "issue-1", identifier: "ENG-42", url: "https://linear.app/acme/issue/ENG-42"}}
+  end
+
+  test "push_task sends a Subtask's parent as Linear's native parentId" do
+    stub_response(fn conn ->
+      {conn, payload} = decode_request(conn)
+
+      assert payload["variables"]["input"] == %{
+               "teamId" => "team-1",
+               "title" => "Rewrite the onboarding copy",
+               "description" => "Alice takes the copy.",
+               "parentId" => "issue-parent-9"
+             }
+
+      Req.Test.json(conn, %{
+        "data" => %{
+          "issueCreate" => %{
+            "success" => true,
+            "issue" => %{"id" => "i2", "identifier" => "ENG-2", "url" => "https://l/2"}
+          }
+        }
+      })
+    end)
+
+    task = %{
+      title: "Rewrite the onboarding copy",
+      description: "Alice takes the copy.",
+      assignee_id: nil,
+      due_date: nil,
+      parent_id: "issue-parent-9"
+    }
+
+    assert {:ok, %{identifier: "ENG-2"}} = Linear.push_task(@credentials, "team-1", task)
   end
 
   test "push_task omits nil assignee and due date rather than sending nulls" do
@@ -212,7 +245,8 @@ defmodule ActionPoints.Sinks.LinearTest do
       title: "Circle back on hiring",
       description: "Vague commitment to revisit hiring.",
       assignee_id: nil,
-      due_date: nil
+      due_date: nil,
+      parent_id: nil
     }
 
     assert {:ok, %{identifier: "ENG-1"}} = Linear.push_task(@credentials, "team-1", task)

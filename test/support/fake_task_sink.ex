@@ -21,6 +21,11 @@ defmodule ActionPoints.Sinks.FakeTaskSink do
 
   @behaviour ActionPoints.Sinks.TaskSink
 
+  # Hierarchy-capable by default, like Linear; scripted off with
+  # `supports_hierarchy: false` to stand in for a flat sink.
+  @impl true
+  def supports_hierarchy?, do: scripted(:supports_hierarchy, true)
+
   @impl true
   def validate_credentials(_credentials), do: scripted(:validate, :ok)
 

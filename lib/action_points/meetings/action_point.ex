@@ -38,6 +38,13 @@ defmodule ActionPoints.Meetings.ActionPoint do
 
     belongs_to :extraction, ActionPoints.Meetings.Extraction
 
+    # A Subtask's parent (see CONTEXT.md): another Action Point of the same
+    # Extraction, exactly one level deep — set only when the meeting itself
+    # broke the deliverable down aloud, and freely restructured at Review.
+    # Orthogonal to Blockers by fiat: nesting carries no other semantics.
+    belongs_to :parent, __MODULE__, foreign_key: :parent_id
+    has_many :subtasks, __MODULE__, foreign_key: :parent_id
+
     timestamps(type: :utc_datetime)
   end
 

@@ -279,17 +279,41 @@ defmodule ActionPoints.Meetings do
         # Idempotence: a re-run replaces, never appends
         Repo.delete_all(from ap in ActionPoint, where: ap.extraction_id == ^extraction.id)
 
-        action_points
-        |> Enum.with_index(1)
-        |> Enum.each(fn {attrs, position} ->
-          attrs =
-            attrs
-            |> verify_quotes(extraction)
-            |> resolve_due_date(anchor)
+        inserted =
+          action_points
+          |> sanitize_parent_refs()
+          |> Enum.with_index(1)
+          |> Enum.map(fn {attrs, position} ->
+            parent = attrs.parent
 
-          %ActionPoint{extraction_id: extraction.id, position: position}
-          |> ActionPoint.changeset(attrs)
-          |> Repo.insert!()
+            attrs =
+              attrs
+              |> verify_quotes(extraction)
+              |> resolve_due_date(anchor)
+
+            action_point =
+              %ActionPoint{extraction_id: extraction.id, position: position}
+              |> ActionPoint.changeset(attrs)
+              |> Repo.insert!()
+
+            {position, action_point, parent}
+          end)
+
+        # Second pass: parent references arrive by position, and a child may
+        # be listed before its parent, so ids only exist once every row does.
+        ids =
+          Map.new(inserted, fn {position, action_point, _parent} ->
+            {position, action_point.id}
+          end)
+
+        Enum.each(inserted, fn
+          {_position, _action_point, nil} ->
+            :ok
+
+          {_position, action_point, parent} ->
+            action_point
+            |> Ecto.Changeset.change(parent_id: Map.fetch!(ids, parent))
+            |> Repo.update!()
         end)
 
         # The Credit is consumed atomically with success — a crash here can't
@@ -327,6 +351,39 @@ defmodule ActionPoints.Meetings do
   end
 
   defp stated_meeting_date(_no_date), do: %{}
+
+  # Mechanical hygiene on the model's Subtask nesting, applied the moment the
+  # Extraction finalises and never able to fail it: a self or dangling
+  # reference is dropped, and a chain deeper than one level is flattened by
+  # dropping the deeper parent reference — a node keeps its parent only when
+  # that parent proposed none of its own (which also promotes both ends of a
+  # cycle). The bias is deliberately against nesting: invented hierarchy is
+  # this feature's failure mode, not missed hierarchy.
+  defp sanitize_parent_refs(action_points) do
+    count = length(action_points)
+    indexed = Enum.with_index(action_points, 1)
+
+    refs =
+      Map.new(indexed, fn {attrs, position} ->
+        {position, valid_parent_ref(Map.get(attrs, :parent), position, count)}
+      end)
+
+    Enum.map(indexed, fn {attrs, position} ->
+      parent =
+        case Map.fetch!(refs, position) do
+          nil -> nil
+          parent -> if Map.fetch!(refs, parent), do: nil, else: parent
+        end
+
+      Map.put(attrs, :parent, parent)
+    end)
+  end
+
+  defp valid_parent_ref(parent, position, count)
+       when is_integer(parent) and parent >= 1 and parent <= count and parent != position,
+       do: parent
+
+  defp valid_parent_ref(_parent, _position, _count), do: nil
 
   # Grounding Quotes are verified the moment the Extraction finalises: only
   # quotes that really appear in the normalised Transcript are stored, so a
@@ -368,12 +425,74 @@ defmodule ActionPoints.Meetings do
   @doc """
   Marks an Action Point accepted or rejected. Rejection is reversible — the
   row keeps everything except its standing in the Review.
+
+  Rejecting a parent promotes its Subtasks to top level — a rule, not an
+  option: curating the parent never orphans or discards the children's work.
+  The promotion is not undone by re-accepting the parent; a wrong rejection
+  costs one set-parent, not silently rebuilt structure.
   """
   def set_action_point_status(%ActionPoint{} = action_point, status)
       when status in [:accepted, :rejected] do
-    action_point
-    |> Ecto.Changeset.change(status: status)
-    |> Repo.update!()
+    {:ok, updated} =
+      Repo.transaction(fn ->
+        if status == :rejected, do: promote_subtasks_of(action_point)
+
+        action_point
+        |> Ecto.Changeset.change(status: status)
+        |> Repo.update!()
+      end)
+
+    updated
+  end
+
+  defp promote_subtasks_of(%ActionPoint{id: id}) do
+    Repo.update_all(
+      from(ap in ActionPoint, where: ap.parent_id == ^id),
+      set: [parent_id: nil, updated_at: DateTime.utc_now() |> DateTime.truncate(:second)]
+    )
+  end
+
+  @doc """
+  Restructures the Review's one-level hierarchy: nests an Action Point under
+  `parent` (another Action Point of the same Extraction), or promotes it to
+  top level with `nil`.
+
+  Never deeper than one level, mechanically: nesting an Action Point that has
+  Subtasks of its own promotes them first, and a parent that is itself a
+  Subtask is refused (`{:error, :invalid_parent}`) — as are self-parenting
+  and a parent from another Extraction.
+
+  A pushed Action Point is refused (`{:error, :pushed}`): its place in the
+  Task Sink's hierarchy was created with it, so restructuring here would only
+  make the Review lie about what Push did.
+  """
+  def set_action_point_parent(%ActionPoint{sink_issue_id: id}, _parent) when not is_nil(id) do
+    {:error, :pushed}
+  end
+
+  def set_action_point_parent(%ActionPoint{} = action_point, nil) do
+    {:ok,
+     action_point
+     |> Ecto.Changeset.change(parent_id: nil)
+     |> Repo.update!()}
+  end
+
+  def set_action_point_parent(%ActionPoint{} = action_point, %ActionPoint{} = parent) do
+    if parent.id == action_point.id or parent.extraction_id != action_point.extraction_id or
+         not is_nil(parent.parent_id) do
+      {:error, :invalid_parent}
+    else
+      {:ok, updated} =
+        Repo.transaction(fn ->
+          promote_subtasks_of(action_point)
+
+          action_point
+          |> Ecto.Changeset.change(parent_id: parent.id)
+          |> Repo.update!()
+        end)
+
+      {:ok, updated}
+    end
   end
 
   @doc """
@@ -476,9 +595,41 @@ defmodule ActionPoints.Meetings do
   Lists the Action Points a Push still has to create: accepted in the Review
   and carrying no created-issue reference yet. A retry after a partial Push
   therefore picks up exactly the missing ones — never a duplicate.
+
+  Parents come before Subtasks, whatever their positions: a child is created
+  carrying its parent's sink issue id, so the parent's must exist first.
   """
   def list_pushable_action_points(extraction_id) do
-    Repo.all(from ap in pushable_query(extraction_id), order_by: [asc: ap.position])
+    Repo.all(
+      from ap in pushable_query(extraction_id),
+        order_by: [asc: fragment("? IS NOT NULL", ap.parent_id), asc: ap.position]
+    )
+  end
+
+  @doc """
+  The sink issue id recorded on an Action Point — nil while unpushed, or for
+  an id that no longer exists. How a Push finds the parent issue a Subtask
+  attaches to, including a parent created by an earlier, partially-failed
+  attempt: retry reads the recorded id rather than re-deriving anything.
+  """
+  def get_action_point_sink_issue_id(action_point_id) do
+    Repo.one(from ap in ActionPoint, where: ap.id == ^action_point_id, select: ap.sink_issue_id)
+  end
+
+  @doc """
+  Orders a Review's Action Points for its indented one-level list: top-level
+  Action Points by position, each followed immediately by its Subtasks in
+  position order. Pure — feed it the preloaded, position-ordered list.
+  """
+  def order_for_review(action_points) do
+    subtasks =
+      action_points
+      |> Enum.filter(& &1.parent_id)
+      |> Enum.group_by(& &1.parent_id)
+
+    action_points
+    |> Enum.filter(&is_nil(&1.parent_id))
+    |> Enum.flat_map(fn parent -> [parent | Map.get(subtasks, parent.id, [])] end)
   end
 
   @doc """
