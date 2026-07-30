@@ -317,6 +317,18 @@ defmodule ActionPoints.MeetingsTest do
       assert action_point.due_date == ~D[2026-05-06]
     end
 
+    test "a span end resolves to a working day against the meeting date, not today" do
+      # "…before the quarter closes", said in a meeting held on 4 May 2026:
+      # Q2 2026 ends Tuesday 30 June, whatever today happens to be.
+      action_point =
+        run_with_timing(%{kind: :span_end, modifier: :this, unit: :quarter},
+          local_date: ~D[2026-07-27],
+          stated_meeting_date: ~D[2026-05-04]
+        )
+
+      assert action_point.due_date == ~D[2026-06-30]
+    end
+
     test "a vague classification produces an Action Point with no due date" do
       action_point =
         run_with_timing(%{kind: :vague}, local_date: ~D[2026-07-27])

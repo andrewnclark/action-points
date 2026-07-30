@@ -33,8 +33,11 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
       when the weekday stood bare
     - "relative_day": "today" or "tomorrow" — report the offset in days,
       zero for today, one for tomorrow
-    - "span_end": the end of a period ("by the end of the week") — report
-      whether it was this or next, and whether a week, month, or quarter
+    - "span_end": a stretch of calendar the task must land inside ("by the
+      end of the week", "before the quarter closes", "sometime next month")
+      — report whether it was this or next, and whether a week, month, or
+      quarter. Naming a span pins a date even when the phrasing sounds
+      loose: "sometime next month" is a span, not vague
     - "duration": a length of time out ("in two weeks") — report the unit
       and the count
     - "vague": a deadline was voiced but pins down no date ("soon", "before
