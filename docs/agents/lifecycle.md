@@ -28,6 +28,8 @@ Follow `/implement` for issue #N: `/tdd` at pre-agreed seams, CONTEXT.md vocabul
 
 Run any review pass through **synchronous (foreground) sub-agents** — the fresh context window is the point of a sub-agent reviewer, so keep it, but the spawn must block until the report returns. Never spawn reviewers in the background and stop to wait: their completion signals route to the orchestrator, not to you, and a turn ended "waiting" is a stall.
 
+Keep the reviewer's context genuinely fresh: the review prompt names the ticket and the diff to examine, never your reasoning for it. Handing over the conclusion you reached — "I did it this way because the spec implies X, confirm that's right" — turns an independent check into an agreement, and the fresh window buys you nothing.
+
 Tests run on the host against your own forwarded port — `config/test.exs` reads `DB_PORT` (default 5433), and the `mix test` alias creates and migrates `action_points_test` in your container on first run; there is no shared database to trample.
 
 ```bash
@@ -41,7 +43,18 @@ Generate migrations the normal way (`mix ecto.gen.migration`) — do not hand-cr
 
 Never run mix tasks in the developer's main checkout — the `_build` lock wedges their running dev server. Your worktree has its own `_build`; everything happens there, and the first compile is cold.
 
-Completion: full suite green.
+Before delivering, run the whole gate rather than the suite alone:
+
+```bash
+DB_PORT=$((5500+N)) mix precommit
+```
+
+`precommit` is `compile --warning-as-errors`, `deps.unlock --unused`, `format`, `credo`, and
+`test`. Credo is calibrated in `.credo.exs` to the codebase as it stands, so a finding means
+your change introduced it — fix the code rather than raising the threshold. If a threshold
+genuinely needs to move, say so in the PR body and why.
+
+Completion: `mix precommit` green.
 
 ## Deliver
 
