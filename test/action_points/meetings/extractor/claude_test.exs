@@ -2,6 +2,7 @@ defmodule ActionPoints.Meetings.Extractor.ClaudeTest do
   use ExUnit.Case, async: false
 
   alias ActionPoints.Meetings.Extractor.Claude
+  alias ActionPoints.Meetings.Timing
 
   @transcript "Priya: I'll send the Q3 report by July 31st 2026."
 
@@ -139,6 +140,10 @@ defmodule ActionPoints.Meetings.Extractor.ClaudeTest do
        %{kind: :span_end, modifier: :next, unit: :month}},
       {%{"kind" => "duration", "unit" => "week", "count" => 2},
        %{kind: :duration, unit: :week, count: 2}},
+      # A spoken quantifier arrives as the word, not as a number the model
+      # chose: decoding it is the application's, through a closed lexicon.
+      {%{"kind" => "duration", "unit" => "week", "count" => "couple"},
+       %{kind: :duration, unit: :week, count: :couple}},
       {%{"kind" => "vague"}, %{kind: :vague}}
     ]
 
@@ -174,12 +179,58 @@ defmodule ActionPoints.Meetings.Extractor.ClaudeTest do
     end
   end
 
+  test "every quantifier the adapter accepts is one the resolver decodes" do
+    # The adapter's lexicon is derived from the resolver's rather than
+    # restated, and this is what makes that visible: a word accepted here but
+    # unknown there would parse cleanly and then pin no date at all.
+    timings =
+      Enum.map(Timing.quantifiers(), fn quantifier ->
+        %{"kind" => "duration", "unit" => "week", "count" => Atom.to_string(quantifier)}
+      end)
+
+    stub_response(fn conn ->
+      Req.Test.json(conn, %{
+        "stop_reason" => "end_turn",
+        "content" => [
+          %{
+            "type" => "text",
+            "text" =>
+              Jason.encode!(%{
+                "meeting_date" => nil,
+                "action_points" =>
+                  Enum.map(timings, fn timing ->
+                    %{
+                      "title" => "A task",
+                      "description" => "",
+                      "assignee_guess" => nil,
+                      "timing" => timing,
+                      "quotes" => []
+                    }
+                  end)
+              })
+          }
+        ]
+      })
+    end)
+
+    assert {:ok, %{action_points: action_points}} = Claude.extract(@transcript)
+    assert length(action_points) == length(Timing.quantifiers())
+
+    for %{timing: timing} <- action_points do
+      assert Timing.resolve(timing, ~D[2026-07-28])
+    end
+  end
+
   test "timing the schema should have prevented is no classification, not a failed Extraction" do
     malformed = [
       %{"kind" => "weekday", "weekday" => "someday", "modifier" => nil},
       %{"kind" => "weekday", "weekday" => "monday", "modifier" => "last"},
       %{"kind" => "relative_day", "offset" => "tomorrow"},
       %{"kind" => "duration", "unit" => "fortnight", "count" => 1},
+      # A quantifier outside the closed lexicon is not decoded into an atom the
+      # resolver would then have to reject — it never becomes one.
+      %{"kind" => "duration", "unit" => "week", "count" => "a few"},
+      %{"kind" => "duration", "unit" => "day", "count" => 0},
       %{"kind" => "eventually"},
       "by Wednesday"
     ]

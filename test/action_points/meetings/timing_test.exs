@@ -224,6 +224,73 @@ defmodule ActionPoints.Meetings.TimingTest do
     end
   end
 
+  describe "duration" do
+    test "days count on from the meeting date" do
+      assert Timing.resolve(duration(:day, 1), @tuesday) == ~D[2026-07-29]
+      assert Timing.resolve(duration(:day, 10), @tuesday) == ~D[2026-08-07]
+    end
+
+    test "weeks count on from the meeting date, landing on its own weekday" do
+      assert Timing.resolve(duration(:week, 1), @tuesday) == ~D[2026-08-04]
+      assert Timing.resolve(duration(:week, 2), @tuesday) == ~D[2026-08-11]
+    end
+
+    test "months count on by the calendar, not by thirty days" do
+      assert Timing.resolve(duration(:month, 1), @tuesday) == ~D[2026-08-28]
+      assert Timing.resolve(duration(:month, 2), @tuesday) == ~D[2026-09-28]
+    end
+
+    test "a month from a day the next month does not have lands on that month's last" do
+      assert Timing.resolve(duration(:month, 1), ~D[2026-01-31]) == ~D[2026-02-28]
+    end
+
+    test "durations cross the year boundary" do
+      assert Timing.resolve(duration(:month, 3), ~D[2026-11-15]) == ~D[2027-02-15]
+      assert Timing.resolve(duration(:week, 4), ~D[2026-12-15]) == ~D[2027-01-12]
+    end
+
+    test "a resolved duration is left where it falls, weekend or not" do
+      # Unlike a span end, a duration names a length rather than a stretch of
+      # calendar: "in two weeks" said on a Saturday means that Saturday, and
+      # nudging it would be answering a question nobody asked.
+      assert Timing.resolve(duration(:week, 2), ~D[2026-08-01]) == ~D[2026-08-15]
+    end
+  end
+
+  # The lexicon is closed — one entry — so that every quantifier the
+  # application decodes can be named in a test. An open instruction to read
+  # quantifiers sensibly could not be: "a few" would be three, or four, or
+  # five, and the number would be the model's invention rather than the
+  # meeting's word.
+  describe "the closed quantifier lexicon" do
+    test "every quantifier in the lexicon decodes, and the lexicon is one entry long" do
+      # The list is the enumeration the closed lexicon promises: whatever it
+      # holds, each entry pins a date. The length is asserted because an entry
+      # added without a test of its own is precisely what "closed" forbids.
+      assert Timing.quantifiers() == [:couple]
+
+      for quantifier <- Timing.quantifiers() do
+        assert Timing.resolve(duration(:week, quantifier), @tuesday)
+      end
+    end
+
+    test "`a couple` decodes as two, in every unit" do
+      for unit <- [:day, :week, :month] do
+        assert Timing.resolve(duration(unit, :couple), @tuesday) ==
+                 Timing.resolve(duration(unit, 2), @tuesday)
+      end
+    end
+
+    test "no other quantifier decodes" do
+      # "A few", "several", "some" and "a while" are the model's to classify as
+      # vague. Should one arrive as a duration anyway, it pins nothing here:
+      # the lexicon is the only door, and it has one entry.
+      for quantifier <- [:few, :several, :some, :while, :couple_of_dozen] do
+        assert Timing.resolve(duration(:week, quantifier), @tuesday) == nil
+      end
+    end
+  end
+
   describe "unpinnable and not-yet-resolved kinds" do
     test "vague produces no due date" do
       assert Timing.resolve(%{kind: :vague}, @tuesday) == nil
@@ -231,10 +298,6 @@ defmodule ActionPoints.Meetings.TimingTest do
 
     test "no classification produces no due date" do
       assert Timing.resolve(nil, @tuesday) == nil
-    end
-
-    test "duration is a later ticket and resolves to nothing for now" do
-      assert Timing.resolve(%{kind: :duration, unit: :week, count: 2}, @tuesday) == nil
     end
   end
 
@@ -286,10 +349,16 @@ defmodule ActionPoints.Meetings.TimingTest do
                nil
 
       assert Timing.resolve(%{kind: :duration}, @tuesday) == nil
+      assert Timing.resolve(duration(:fortnight, 1), @tuesday) == nil
+      assert Timing.resolve(duration(:week, 0), @tuesday) == nil
+      assert Timing.resolve(duration(:week, -2), @tuesday) == nil
+      assert Timing.resolve(duration(:week, "2"), @tuesday) == nil
     end
   end
 
   defp weekday(day, modifier \\ nil), do: %{kind: :weekday, weekday: day, modifier: modifier}
 
   defp span(modifier, unit), do: %{kind: :span_end, modifier: modifier, unit: unit}
+
+  defp duration(unit, count), do: %{kind: :duration, unit: unit, count: count}
 end
