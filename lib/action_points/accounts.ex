@@ -77,12 +77,14 @@ defmodule ActionPoints.Accounts do
   """
   def register_user(attrs) do
     Repo.transaction(fn ->
-      with {:ok, user} <- Repo.insert(User.email_changeset(%User{}, attrs)) do
-        # a brand-new user cannot already hold the Free Meeting, so the grant cannot conflict
-        {:ok, _free_meeting} = Billing.grant_signup_credit(user)
-        user
-      else
-        {:error, changeset} -> Repo.rollback(changeset)
+      case Repo.insert(User.email_changeset(%User{}, attrs)) do
+        {:ok, user} ->
+          # a brand-new user cannot already hold the Free Meeting, so the grant cannot conflict
+          {:ok, _free_meeting} = Billing.grant_signup_credit(user)
+          user
+
+        {:error, changeset} ->
+          Repo.rollback(changeset)
       end
     end)
   end
