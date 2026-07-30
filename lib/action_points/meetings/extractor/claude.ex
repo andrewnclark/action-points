@@ -26,8 +26,11 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
     Never compute, resolve, or infer a calendar date — report the kind of
     timing language you heard and its parts exactly as spoken; the
     application does the calendar arithmetic. The kinds:
-    - "absolute": an actual calendar date was said aloud — report its day,
-      month, and year as numbers, with a null year when none was said
+    - "absolute": a calendar date was said aloud, whole or in part — "the
+      12th", "March the 3rd", a day and month and year together. Report the
+      day as a number, and the month and year as numbers only when they were
+      spoken, null otherwise. Never work out a part nobody said: the
+      application completes a partial date from the meeting date
     - "weekday": a day of the week was named ("by Wednesday") — report the
       weekday, and the modifier "this" or "next" when one was said, null
       when the weekday stood bare
@@ -124,7 +127,7 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
         "properties" => %{
           "kind" => %{"enum" => ["absolute"]},
           "year" => %{"anyOf" => [%{"type" => "integer"}, %{"type" => "null"}]},
-          "month" => %{"type" => "integer"},
+          "month" => %{"anyOf" => [%{"type" => "integer"}, %{"type" => "null"}]},
           "day" => %{"type" => "integer"}
         },
         "required" => ["kind", "year", "month", "day"],
@@ -312,8 +315,17 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
   # as no classification rather than as a failed Extraction: malformed timing
   # must never cost the user their Action Points.
   defp parse_timing(%{"kind" => "absolute", "year" => year, "month" => month, "day" => day})
-       when (is_integer(year) or is_nil(year)) and is_integer(month) and is_integer(day) do
+       when is_integer(year) and is_integer(month) and is_integer(day) do
     %{kind: :absolute, year: year, month: month, day: day}
+  end
+
+  # A date with parts left unsaid, for `Timing` to complete from the Meeting
+  # Date. A year is only ever spoken after the month it belongs to, so a month
+  # that went unsaid takes the year with it: a stated year beside an unsaid
+  # month is a shape no meeting produces, and reads as no classification.
+  defp parse_timing(%{"kind" => "absolute", "year" => nil, "month" => month, "day" => day})
+       when (is_integer(month) or is_nil(month)) and is_integer(day) do
+    %{kind: :absolute, year: nil, month: month, day: day}
   end
 
   defp parse_timing(%{"kind" => "weekday", "weekday" => weekday} = timing) do

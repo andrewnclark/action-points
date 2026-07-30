@@ -74,9 +74,71 @@ defmodule ActionPoints.Meetings.TimingTest do
       assert Timing.resolve(%{kind: :absolute, year: 2026, month: 2, day: 30}, @tuesday) == nil
     end
 
-    test "a partial date (no year) is not yet resolved" do
-      # Year inference is a later ticket; until then a partial date pins nothing.
-      assert Timing.resolve(%{kind: :absolute, year: nil, month: 3, day: 3}, @tuesday) == nil
+    test "a stated date is taken at its word, weekend or past" do
+      # 2026-03-07 is a Saturday, and both dates are behind the anchor. A date
+      # said aloud is the speaker's choice, not the application's to move.
+      assert Timing.resolve(%{kind: :absolute, year: 2026, month: 3, day: 7}, @tuesday) ==
+               ~D[2026-03-07]
+    end
+  end
+
+  describe "absolute: no year said" do
+    test "completes to the meeting's own year when that date is still ahead" do
+      assert Timing.resolve(partial(9, 3), @tuesday) == ~D[2026-09-03]
+    end
+
+    test "completes to the following year when the meeting's own year has passed it" do
+      # "March the 3rd", said in July, is next March — not four months back.
+      assert Timing.resolve(partial(3, 3), @tuesday) == ~D[2027-03-03]
+    end
+
+    test "the meeting's own date completes to itself, not a year on" do
+      assert Timing.resolve(partial(7, 28), @tuesday) == @tuesday
+    end
+
+    test "a date neither year can hold pins nothing" do
+      # The 29th of February, said in a run of non-leap years, is nearly two
+      # years out — far past anything a meeting could have meant, so it pins
+      # nothing rather than reaching for a date nobody said.
+      assert Timing.resolve(partial(2, 29), @tuesday) == nil
+
+      # Reached from a year that does hold it, it resolves like any other date.
+      assert Timing.resolve(partial(2, 29), ~D[2028-01-05]) == ~D[2028-02-29]
+    end
+
+    test "an impossible day pins nothing" do
+      assert Timing.resolve(partial(2, 30), @tuesday) == nil
+      assert Timing.resolve(partial(13, 1), @tuesday) == nil
+    end
+  end
+
+  describe "absolute: no month or year said" do
+    test "completes to the meeting's own month when that day is still ahead" do
+      assert Timing.resolve(day_only(31), @tuesday) == ~D[2026-07-31]
+    end
+
+    test "completes to the next month when the meeting's own month has passed it" do
+      assert Timing.resolve(day_only(3), @tuesday) == ~D[2026-08-03]
+    end
+
+    test "the meeting's own day completes to itself" do
+      assert Timing.resolve(day_only(28), @tuesday) == @tuesday
+    end
+
+    test "completion crosses the year boundary" do
+      # Said on the 20th of December, "the 3rd" is January's.
+      assert Timing.resolve(day_only(3), ~D[2026-12-20]) == ~D[2027-01-03]
+    end
+
+    test "skips months too short to hold the day" do
+      # "The 31st", said in April, cannot be April's.
+      assert Timing.resolve(day_only(31), ~D[2026-04-15]) == ~D[2026-05-31]
+      assert Timing.resolve(day_only(30), ~D[2027-02-15]) == ~D[2027-03-30]
+    end
+
+    test "an impossible day pins nothing" do
+      assert Timing.resolve(day_only(32), @tuesday) == nil
+      assert Timing.resolve(day_only(0), @tuesday) == nil
     end
   end
 
@@ -291,7 +353,31 @@ defmodule ActionPoints.Meetings.TimingTest do
     end
   end
 
-  describe "unpinnable and not-yet-resolved kinds" do
+  describe "the classification union" do
+    test "every kind that can pin a date pins one" do
+      # The union is closed, so it can be enumerated: no kind of timing
+      # language the model can report is left waiting on a later ticket.
+      pinning = [
+        %{kind: :absolute, year: 2027, month: 3, day: 3},
+        partial(3, 3),
+        day_only(3),
+        weekday(:wednesday),
+        %{kind: :relative_day, offset: 1},
+        span(:this, :week),
+        span(:next, :month),
+        span(:this, :quarter),
+        duration(:day, 10),
+        duration(:week, :couple),
+        duration(:month, 1)
+      ]
+
+      for classification <- pinning do
+        assert %Date{} = Timing.resolve(classification, @tuesday)
+      end
+    end
+  end
+
+  describe "unpinnable kinds" do
     test "vague produces no due date" do
       assert Timing.resolve(%{kind: :vague}, @tuesday) == nil
     end
@@ -341,8 +427,18 @@ defmodule ActionPoints.Meetings.TimingTest do
     test "a kind missing the fields it needs pins nothing rather than raising" do
       assert Timing.resolve(%{kind: :absolute}, @tuesday) == nil
       assert Timing.resolve(%{kind: :absolute, year: 2026}, @tuesday) == nil
+
+      # An absent part is not an unsaid one: completion reads the nulls an
+      # adapter put there, never a field it forgot to send.
+      assert Timing.resolve(%{kind: :absolute, day: 3}, @tuesday) == nil
+
       assert Timing.resolve(%{kind: :absolute, year: 2026, month: 13, day: 40}, @tuesday) == nil
       assert Timing.resolve(%{kind: :absolute, year: 2026, month: "07", day: 1}, @tuesday) == nil
+      assert Timing.resolve(%{kind: :absolute, year: nil, month: 3, day: "3"}, @tuesday) == nil
+
+      # A year without the month it belongs to completes nothing: the missing
+      # part is the one the meeting date cannot supply.
+      assert Timing.resolve(%{kind: :absolute, year: 2027, month: nil, day: 3}, @tuesday) == nil
       assert Timing.resolve(%{kind: :span_end}, @tuesday) == nil
 
       assert Timing.resolve(%{kind: :span_end, modifier: :this, unit: :fortnight}, @tuesday) ==
@@ -355,6 +451,10 @@ defmodule ActionPoints.Meetings.TimingTest do
       assert Timing.resolve(duration(:week, "2"), @tuesday) == nil
     end
   end
+
+  defp partial(month, day), do: %{kind: :absolute, year: nil, month: month, day: day}
+
+  defp day_only(day), do: %{kind: :absolute, year: nil, month: nil, day: day}
 
   defp weekday(day, modifier \\ nil), do: %{kind: :weekday, weekday: day, modifier: modifier}
 
