@@ -25,6 +25,13 @@ defmodule ActionPoints.Meetings.Extraction do
     field :meeting_date, :date
     field :meeting_date_source, Ecto.Enum, values: [:filename, :transcript, :assumed]
 
+    # The sample meeting: an authored Extraction rather than a model run, so
+    # the landing page can show the product working without spending anything
+    # (`ActionPoints.Meetings.SampleMeeting`). Consumes no Credit on success,
+    # and says so on the Review screen — a wholly fictional meeting has to
+    # admit it is one.
+    field :sample, :boolean, default: false
+
     belongs_to :user, ActionPoints.Accounts.User
     has_many :action_points, ActionPoints.Meetings.ActionPoint, preload_order: [asc: :position]
 

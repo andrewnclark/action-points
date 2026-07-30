@@ -12,18 +12,9 @@ defmodule ActionPointsWeb.LandingPageTest do
   Tom: Great. I'll book the venue for the offsite, no rush on that one.
   """
 
-  test "one click loads the sample transcript and starts an Extraction", %{conn: conn} do
-    stub_extractor(
-      {:ok,
-       [
-         %{
-           title: "Send the launch checklist",
-           description: "From the sample meeting.",
-           assignee_guess: nil,
-           timing: nil
-         }
-       ]}
-    )
+  test "one click lands on the sample Review, with no model call behind it", %{conn: conn} do
+    # Any Extractor call would raise, so a live run cannot pass silently here.
+    stub_extractor(:crash)
 
     conn = get(conn, ~p"/")
     {:ok, home, _html} = live(conn)
@@ -35,14 +26,59 @@ defmodule ActionPointsWeb.LandingPageTest do
 
     {:ok, review, _html} = follow_redirect(result, conn)
 
-    eventually(fn ->
-      assert has_element?(review, "#action-points li", "Send the launch checklist")
-    end)
+    # No spinner on the way: the Review is finished when the visitor arrives.
+    refute has_element?(review, "#extraction-progress")
+    assert has_element?(review, "#action-points li", "Finish the pricing table")
 
-    # The sample is a real Transcript run through the real pipeline.
+    # And it says what it is — the meeting is fiction, the screen is not.
+    assert has_element?(review, "#sample-notice", "sample meeting")
+
     extraction = Repo.one!(Extraction)
-    assert extraction.transcript_text =~ ":"
     assert extraction.status == :succeeded
+    assert extraction.sample
+  end
+
+  test "sample clicks cost nothing, so they don't count against the Demo's cap",
+       %{conn: conn} do
+    override_anon_limits(session: {1, :timer.hours(1)}, ip: {1, :timer.hours(1)})
+    stub_extractor(:crash)
+
+    conn = get(conn, ~p"/")
+
+    for _click <- 1..3 do
+      {:ok, home, _html} = live(conn)
+      assert {:error, {:live_redirect, _to}} = home |> element("#load-sample") |> render_click()
+    end
+
+    assert Repo.aggregate(Extraction, :count) == 3
+
+    # The allowance is untouched: a real Transcript still gets its one run.
+    stub_extractor(
+      {:ok,
+       [
+         %{
+           title: "Send the Q3 report to finance",
+           description: "Priya committed to sending it.",
+           assignee_guess: "Priya",
+           timing: nil
+         }
+       ]}
+    )
+
+    {:ok, home, _html} = live(conn)
+
+    result =
+      home
+      |> form("#transcript-form", extraction: %{transcript_text: @transcript})
+      |> render_submit()
+
+    # Redirected to a Review rather than turned away: the allowance was there.
+    assert {:error, {:live_redirect, _to}} = result
+    {:ok, review, _html} = follow_redirect(result, conn)
+
+    eventually(fn ->
+      assert has_element?(review, "#action-points li", "Send the Q3 report to finance")
+    end)
   end
 
   test "the landing page explains the product: how it works, pricing, privacy", %{conn: conn} do
