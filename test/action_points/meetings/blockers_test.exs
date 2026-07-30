@@ -17,7 +17,7 @@ defmodule ActionPoints.Meetings.BlockersTest do
   # Runs an Extraction whose three Action Points carry the given blocked_by
   # proposals (one list per position) and returns them as stored, in position
   # order, with their Blockers preloaded.
-  defp extract_with_blockers(blocked_by_lists, session \\ "session") do
+  defp extract_with_blockers(blocked_by_lists) do
     action_points =
       @titles
       |> Enum.zip(blocked_by_lists)
@@ -26,10 +26,10 @@ defmodule ActionPoints.Meetings.BlockersTest do
     stub_extractor({:ok, action_points})
 
     {:ok, extraction} =
-      Meetings.create_extraction(nil, session, %{"transcript_text" => @transcript})
+      Meetings.create_extraction(nil, "session", %{"transcript_text" => @transcript})
 
     Meetings.run_extraction(extraction)
-    Meetings.get_extraction!(extraction.id, session).action_points
+    Meetings.get_extraction!(extraction.id, "session").action_points
   end
 
   defp reload(action_point) do
@@ -130,46 +130,6 @@ defmodule ActionPoints.Meetings.BlockersTest do
   end
 
   describe "Review curation of Blockers" do
-    test "add_action_point_blocker links two of the Extraction's Action Points" do
-      [first, _second, third] = extract_with_blockers([[], [], []])
-
-      assert {:ok, %Blocker{}} = Meetings.add_action_point_blocker(third, first)
-      assert blocker_titles(reload(third)) == ["Migrate the database"]
-    end
-
-    test "refuses a self-reference" do
-      [first, _second, _third] = extract_with_blockers([[], [], []])
-
-      assert {:error, :self_reference} = Meetings.add_action_point_blocker(first, first)
-    end
-
-    test "refuses a duplicate relation" do
-      [first, second, _third] = extract_with_blockers([[], [1], []])
-
-      assert {:error, :duplicate} = Meetings.add_action_point_blocker(second, first)
-    end
-
-    test "refuses an edge that would close a cycle" do
-      [first, _second, third] = extract_with_blockers([[], [1], [2]])
-
-      assert {:error, :cycle} = Meetings.add_action_point_blocker(first, third)
-    end
-
-    test "refuses to link Action Points of different Extractions" do
-      [first, _second, _third] = extract_with_blockers([[], [], []])
-      [other, _, _] = extract_with_blockers([[], [], []], "other-session")
-
-      assert {:error, :cross_extraction} = Meetings.add_action_point_blocker(first, other)
-    end
-
-    test "refuses a relation touching a rejected Action Point" do
-      [first, second, third] = extract_with_blockers([[], [], []])
-      Meetings.set_action_point_status(first, :rejected)
-
-      assert {:error, :rejected} = Meetings.add_action_point_blocker(second, first)
-      assert {:error, :rejected} = Meetings.add_action_point_blocker(reload(first), third)
-    end
-
     test "remove_action_point_blocker deletes exactly that relation" do
       [_first, second, _third] = extract_with_blockers([[], [1, 3], []])
       [blocker, keeper] = reload(second).blockers

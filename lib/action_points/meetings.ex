@@ -463,8 +463,11 @@ defmodule ActionPoints.Meetings do
 
   Rejecting a parent also promotes its Subtasks to top level — a rule, not an
   option: curating the parent never orphans or discards the children's work.
-  The promotion is not undone by re-accepting the parent; a wrong rejection
-  costs one set-parent, not silently rebuilt structure.
+  The promotion is not undone by re-accepting the parent, and since ADR-0009
+  Review cannot re-nest by hand either. That costs the nesting, not the work:
+  the children stay accepted and pushable with everything else intact, and the
+  nesting is restored where nesting belongs — in the sink. Structure is never
+  silently rebuilt.
   """
   def set_action_point_status(%ActionPoint{} = action_point, status)
       when status in [:accepted, :rejected] do
@@ -495,46 +498,24 @@ defmodule ActionPoints.Meetings do
   end
 
   @doc """
-  Restructures the Review's one-level hierarchy: nests an Action Point under
-  `parent` (another Action Point of the same Extraction), or promotes it to
-  top level with `nil`.
-
-  Never deeper than one level, mechanically: nesting an Action Point that has
-  Subtasks of its own promotes them first, and a parent that is itself a
-  Subtask is refused (`{:error, :invalid_parent}`) — as are self-parenting
-  and a parent from another Extraction.
+  Lifts a Subtask out of its parent to top level — undoing a nesting the
+  Extraction proposed. The only direction Review moves an Action Point in:
+  ADR-0009 leaves nesting to the meeting, so there is no inverse of this.
 
   A pushed Action Point is refused (`{:error, :pushed}`): its place in the
   Task Sink's hierarchy was created with it, so restructuring here would only
-  make the Review lie about what Push did.
+  make the Review lie about what Push did. One already at top level is left as
+  it is — the card offers no such button, so only a stale screen asks.
   """
-  def set_action_point_parent(%ActionPoint{sink_issue_id: id}, _parent) when not is_nil(id) do
+  def promote_action_point(%ActionPoint{sink_issue_id: id}) when not is_nil(id) do
     {:error, :pushed}
   end
 
-  def set_action_point_parent(%ActionPoint{} = action_point, nil) do
+  def promote_action_point(%ActionPoint{} = action_point) do
     {:ok,
      action_point
      |> Ecto.Changeset.change(parent_id: nil)
      |> Repo.update!()}
-  end
-
-  def set_action_point_parent(%ActionPoint{} = action_point, %ActionPoint{} = parent) do
-    if parent.id == action_point.id or parent.extraction_id != action_point.extraction_id or
-         not is_nil(parent.parent_id) do
-      {:error, :invalid_parent}
-    else
-      {:ok, updated} =
-        Repo.transaction(fn ->
-          promote_subtasks_of(action_point)
-
-          action_point
-          |> Ecto.Changeset.change(parent_id: parent.id)
-          |> Repo.update!()
-        end)
-
-      {:ok, updated}
-    end
   end
 
   @doc """
@@ -617,56 +598,9 @@ defmodule ActionPoints.Meetings do
   end
 
   @doc """
-  Links two of an Extraction's Action Points during Review: `blocked` gains a
-  blocked-by relation on `blocked_by`. The same nonsense the Extraction's
-  hygiene drops is refused here — a self-reference, a duplicate edge, an edge
-  closing a cycle — plus the two shapes only Review can attempt: a relation
-  across Extractions (the product never links into an existing backlog) and a
-  relation touching a rejected Action Point (its issue will never exist).
-  """
-  def add_action_point_blocker(%ActionPoint{} = blocked, %ActionPoint{} = blocked_by) do
-    cond do
-      blocked.id == blocked_by.id ->
-        {:error, :self_reference}
-
-      blocked.extraction_id != blocked_by.extraction_id ->
-        {:error, :cross_extraction}
-
-      rejected_end?(blocked, blocked_by) ->
-        {:error, :rejected}
-
-      Repo.get_by(Blocker, action_point_id: blocked.id, blocked_by_id: blocked_by.id) ->
-        {:error, :duplicate}
-
-      Blocker.creates_cycle?(extraction_edges(blocked.extraction_id), {blocked.id, blocked_by.id}) ->
-        {:error, :cycle}
-
-      true ->
-        {:ok, Repo.insert!(%Blocker{action_point_id: blocked.id, blocked_by_id: blocked_by.id})}
-    end
-  end
-
-  # Checked against the database, not the passed structs — a Review screen can
-  # hold a card whose sibling was rejected since it last rendered.
-  defp rejected_end?(blocked, blocked_by) do
-    Repo.exists?(
-      from ap in ActionPoint,
-        where: ap.id in ^[blocked.id, blocked_by.id] and ap.status == :rejected
-    )
-  end
-
-  defp extraction_edges(extraction_id) do
-    Repo.all(
-      from b in Blocker,
-        join: ap in assoc(b, :action_point),
-        where: ap.extraction_id == ^extraction_id,
-        select: {b.action_point_id, b.blocked_by_id}
-    )
-  end
-
-  @doc """
   Removes one Blocker during Review — one click, and a wrong guess costs
-  nothing.
+  nothing. The only curation Review does to relations: ADR-0009 leaves the
+  drawing of edges to the meeting, so there is no inverse of this.
   """
   def remove_action_point_blocker(%Blocker{} = blocker) do
     Repo.delete!(blocker)

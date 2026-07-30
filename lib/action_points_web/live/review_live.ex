@@ -437,49 +437,20 @@ defmodule ActionPointsWeb.ReviewLive do
                       </li>
                     </ul>
                   </details>
+                  <%!-- Assignee, due date, and whatever Blockers the meeting
+                  stated. Nothing goes in this row that the card already states
+                  by position — nesting is carried by the indent alone (#93) —
+                  because the row is read as a column down the list. --%>
                   <div class="mt-3 flex flex-wrap items-center gap-1.5">
-                    <.chip
-                      :if={action_point.parent_id}
-                      role="subtask"
-                      icon="hero-arrow-turn-down-right-micro"
-                    >
-                      Subtask
-                    </.chip>
-                    <%!-- Structure the model missed can still be added: any
-                    top-level Action Point can be nested under another of the
-                    meeting's Action Points — one level, no deeper. --%>
-                    <form
-                      :if={parent_pickable?(action_point, @eligible_parents)}
-                      id={"action-point-#{action_point.id}-parent-form"}
-                      phx-change="set_parent"
-                      phx-value-id={action_point.id}
-                      class="inline-flex items-center gap-1.5"
-                    >
-                      <select
-                        id={"action-point-#{action_point.id}-parent"}
-                        name="parent_id"
-                        data-role="parent-picker"
-                        class="select select-xs w-auto max-w-[16rem]"
-                      >
-                        <option value="" selected>Top level</option>
-                        <option
-                          :for={parent <- @eligible_parents}
-                          :if={parent.id != action_point.id}
-                          value={parent.id}
-                        >
-                          Subtask of: {parent.title}
-                        </option>
-                      </select>
-                    </form>
                     <.assignee_field
                       action_point={action_point}
                       sink_users={@sink_users}
                       pickable={@sink_live? and is_nil(action_point.sink_issue_id)}
                     />
                     <.due_date_field action_point={action_point} today={@today} />
-                    <%!-- Blockers: the ordering the meeting stated, editable
-                    until this Action Point is real in the Task Sink. A wrong
-                    guess costs one click. --%>
+                    <%!-- Blockers: the ordering the meeting stated. Removable
+                    until the relation is real in the Task Sink — a wrong guess
+                    costs one click — but never addable here (ADR-0009). --%>
                     <span
                       :for={blocker <- action_point.blockers}
                       data-role="blocker"
@@ -506,37 +477,6 @@ defmodule ActionPointsWeb.ReviewLive do
                         <.icon name="hero-x-mark-micro" class="size-3" />
                       </button>
                     </span>
-                    <%!-- phx-value-id lives on the form, not the select — same
-                    LiveView constraint as the assignee picker above. --%>
-                    <%!-- A pushed Action Point can still gain a relation: both
-                    issues exist in the sink, so the next Push creates just the
-                    edge (the push bar stays alive for exactly that). --%>
-                    <form
-                      :if={
-                        action_point.status == :accepted and
-                          blocker_candidates(action_point, @blocker_options) != []
-                      }
-                      id={"action-point-#{action_point.id}-blocker-form"}
-                      phx-change="add_blocker"
-                      phx-value-id={action_point.id}
-                      class="inline-flex"
-                    >
-                      <select
-                        id={"action-point-#{action_point.id}-blocker-picker"}
-                        name="blocked_by_id"
-                        data-role="blocker-picker"
-                        aria-label="Add a blocked-by relation"
-                        class="select select-xs w-auto max-w-[14rem] border-dashed text-base-content/65"
-                      >
-                        <option value="" selected>+ Blocked by…</option>
-                        <option
-                          :for={option <- blocker_candidates(action_point, @blocker_options)}
-                          value={option.id}
-                        >
-                          {option.title}
-                        </option>
-                      </select>
-                    </form>
                   </div>
                   <%!-- Timing Quote: the meeting's own words about when this
                   is due, set beneath the chip row that carries the due date so
@@ -882,8 +822,8 @@ defmodule ActionPointsWeb.ReviewLive do
       editing ->
         case Meetings.update_action_point(editing, params) do
           {:ok, _action_point} ->
-            # A retitle changes the "Blocked by" chips and pickers naming this
-            # Action Point on other cards — refresh them all.
+            # A retitle changes the "Blocked by" chips naming this Action Point
+            # on other cards — refresh them all.
             {:noreply,
              socket
              |> assign(:editing, nil)
@@ -908,63 +848,17 @@ defmodule ActionPointsWeb.ReviewLive do
     {:noreply, refresh_all_action_points(socket)}
   end
 
-  def handle_event("add_blocker", %{"blocked_by_id" => ""}, socket) do
-    {:noreply, socket}
-  end
-
-  def handle_event("add_blocker", %{"id" => id, "blocked_by_id" => blocked_by_id}, socket) do
-    session_token = socket.assigns.extraction.session_token
-    blocked = Meetings.get_action_point!(id, session_token)
-    blocked_by = Meetings.get_action_point!(blocked_by_id, session_token)
-
-    case Meetings.add_action_point_blocker(blocked, blocked_by) do
-      {:ok, _blocker} ->
-        {:noreply, refresh_all_action_points(socket)}
-
-      {:error, :cycle} ->
-        {:noreply,
-         socket
-         |> put_flash(
-           :error,
-           "That relation would make these Action Points block each other in a circle."
-         )
-         |> refresh_all_action_points()}
-
-      # The picker never offers these; only a stale screen can attempt them,
-      # and the refresh un-stales it.
-      {:error, _refused} ->
-        {:noreply, refresh_all_action_points(socket)}
-    end
-  end
-
+  # Undoing a nesting the model proposed, which ADR-0009 counts as correcting
+  # the Extraction rather than authoring structure. Its counterpart — nesting
+  # an Action Point the meeting never nested — is deliberately absent.
   def handle_event("promote", %{"id" => id}, socket) do
     action_point = Meetings.get_action_point!(id, socket.assigns.extraction.session_token)
 
-    case Meetings.set_action_point_parent(action_point, nil) do
+    case Meetings.promote_action_point(action_point) do
       {:ok, _promoted} ->
         {:noreply, assign_extraction(socket, refetch_extraction(socket))}
 
       # The card offered no such control — a stale or forged event is a no-op.
-      {:error, _reason} ->
-        {:noreply, socket}
-    end
-  end
-
-  def handle_event("set_parent", %{"id" => id, "parent_id" => ""}, socket) do
-    handle_event("promote", %{"id" => id}, socket)
-  end
-
-  def handle_event("set_parent", %{"id" => id, "parent_id" => parent_id}, socket) do
-    session_token = socket.assigns.extraction.session_token
-    action_point = Meetings.get_action_point!(id, session_token)
-    parent = Meetings.get_action_point!(parent_id, session_token)
-
-    case Meetings.set_action_point_parent(action_point, parent) do
-      {:ok, _nested} ->
-        {:noreply, assign_extraction(socket, refetch_extraction(socket))}
-
-      # A stale picker (the chosen parent was nested meanwhile, or this row
-      # was pushed) is a no-op, not an error screen.
       {:error, _reason} ->
         {:noreply, socket}
     end
@@ -1122,15 +1016,15 @@ defmodule ActionPointsWeb.ReviewLive do
 
   # A status change re-renders the whole Review rather than patching one
   # card: rejecting a parent promotes its Subtasks — a rule, not an option —
-  # so sibling cards and the parent-picker options move with it.
+  # so sibling cards move with it.
   defp set_status(socket, id, status) do
     id
     |> Meetings.get_action_point!(socket.assigns.extraction.session_token)
     |> Meetings.set_action_point_status(status)
 
     # A rejection also removed this Action Point's Blockers and promoted its
-    # Subtasks, so other cards' chips, pickers, and nesting changed too —
-    # refresh the whole list.
+    # Subtasks, so other cards' chips and nesting changed too — refresh the
+    # whole list.
     refresh_all_action_points(socket)
   end
 
@@ -1231,17 +1125,9 @@ defmodule ActionPointsWeb.ReviewLive do
     |> assign(:rejected_count, Enum.count(action_points, &(&1.status == :rejected)))
     |> assign(:has_blockers, Enum.any?(action_points, &(&1.blockers != [])))
     |> assign(:unpushed_relations_count, unpushed_relations_count(action_points))
-    |> assign(
-      :blocker_options,
-      Enum.map(action_points, &%{id: &1.id, title: &1.title, status: &1.status})
-    )
     |> assign(:pushed_action_points, Enum.filter(action_points, & &1.sink_issue_id))
     |> assign(:past_due_count, past_due_count(action_points, socket.assigns.today))
     |> assign(:subtask_count, Enum.count(action_points, & &1.parent_id))
-    |> assign(
-      :eligible_parents,
-      Enum.filter(action_points, &(is_nil(&1.parent_id) and &1.status == :accepted))
-    )
   end
 
   # How many cards are carrying the flag — what decides whether the notice
@@ -1262,25 +1148,6 @@ defmodule ActionPointsWeb.ReviewLive do
     else
       0
     end
-  end
-
-  # The sibling Action Points one card's picker may propose as its blockers:
-  # not itself, not one already blocking it, and never a rejected one — its
-  # task will never exist to point at.
-  defp blocker_candidates(action_point, blocker_options) do
-    existing = MapSet.new(action_point.blockers, & &1.blocked_by_id)
-
-    Enum.reject(blocker_options, fn option ->
-      option.id == action_point.id or option.status == :rejected or option.id in existing
-    end)
-  end
-
-  # The parent picker belongs on a card that can still be nested: top-level,
-  # accepted, unpushed, with at least one other Action Point to nest under.
-  defp parent_pickable?(action_point, eligible_parents) do
-    is_nil(action_point.parent_id) and action_point.status == :accepted and
-      is_nil(action_point.sink_issue_id) and
-      Enum.any?(eligible_parents, &(&1.id != action_point.id))
   end
 
   defp refetch_extraction(socket) do
