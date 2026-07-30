@@ -104,6 +104,26 @@ defmodule ActionPointsWeb.ReviewLive do
               </p>
             </div>
 
+            <%!-- The sample says it is one. Everything below it is a real
+            control doing a real thing to a real Extraction — it is the
+            meeting that is fiction, and a screen this persuasive owes the
+            reader that distinction unprompted. --%>
+            <div
+              :if={@extraction.sample}
+              id="sample-notice"
+              class="mb-4 flex gap-3 rounded-box border border-base-300 bg-base-200 p-4"
+            >
+              <.icon name="hero-beaker" class="size-5 shrink-0 text-base-content/65" />
+              <p class="text-base-content/70">
+                This is the sample meeting — an invented Transcript, so you can see the Review
+                before you spend anything on your own. Curate it, edit it, break it.
+                <.link navigate={~p"/"} class="text-accent hover:underline">
+                  Paste your own Transcript
+                </.link>
+                when you're ready.
+              </p>
+            </div>
+
             <%!-- The tally and the promise sit together: the counts say where the
             curation has got to, the line beside them says it is still reversible. --%>
             <div

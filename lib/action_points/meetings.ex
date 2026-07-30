@@ -16,6 +16,7 @@ defmodule ActionPoints.Meetings do
   alias ActionPoints.Meetings.Blocker
   alias ActionPoints.Meetings.Extraction
   alias ActionPoints.Meetings.GroundingQuote
+  alias ActionPoints.Meetings.SampleMeeting
   alias ActionPoints.Meetings.Timing
   alias ActionPoints.Meetings.TimingQuote
   alias ActionPoints.Meetings.Transcript
@@ -101,6 +102,39 @@ defmodule ActionPoints.Meetings do
   # MVP: the ledger stays truthful and the next attempt is gated.
   defp ensure_credit_available(scope) do
     if Billing.balance(scope) >= 1, do: :ok, else: {:error, :out_of_credits}
+  end
+
+  @doc """
+  Creates the sample Extraction for a visitor with no Transcript to hand:
+  already succeeded, already carrying its Action Points, and never a model
+  call (issue #94).
+
+  It is the same Extraction every other one is — the authored result goes
+  through the same finalising, so the sample Review is the real screen — but
+  it skips the gates on the way in, because there is nothing to gate: no model
+  runs, so no Credit is consumed and no anonymous rate limit is spent. The
+  Demo's cap exists to bound what a stranger can make us pay for; a canned
+  Extraction costs nothing to serve.
+
+  The Meeting Date is `SampleMeeting.days_ago/0` behind the visitor's own
+  local date (`opts[:local_date]`), which is what leaves at least one authored
+  deadline already past — see `SampleMeeting` for why that anchor moves when
+  nothing else about the sample does.
+  """
+  def create_sample_extraction(scope, session_token, opts \\ [])
+      when is_binary(session_token) do
+    extraction =
+      %Extraction{
+        session_token: session_token,
+        user_id: scope_user_id(scope),
+        sample: true,
+        meeting_date: Date.add(assumed_meeting_date(opts), -SampleMeeting.days_ago()),
+        meeting_date_source: :assumed
+      }
+      |> Extraction.changeset(%{"transcript_text" => SampleMeeting.transcript()})
+      |> Repo.insert!()
+
+    finalize_success(extraction, SampleMeeting.result())
   end
 
   @doc """
@@ -324,8 +358,9 @@ defmodule ActionPoints.Meetings do
 
         # The Credit is consumed atomically with success — a crash here can't
         # charge without delivering. Anonymous Extractions have no one to
-        # charge and stay free.
-        if extraction.user_id do
+        # charge and stay free, and so is the sample: it ran no model, so
+        # there is nothing to charge for.
+        if extraction.user_id && not extraction.sample do
           Billing.consume_extraction_credit!(extraction.user_id, extraction.id)
         end
 
