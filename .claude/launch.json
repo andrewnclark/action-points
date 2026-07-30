@@ -10,6 +10,15 @@
       ],
       "port": 4000,
       "autoPort": true
+    },
+    {
+      "name": "phoenix-4001",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "set -a; [ -f ./.env ] && . ./.env; set +a; PORT=4001 exec mix phx.server"
+      ],
+      "port": 4001
     }
   ]
 }

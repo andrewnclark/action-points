@@ -138,7 +138,6 @@ defmodule ActionPointsWeb.HomeLive do
               type="button"
               id="load-sample"
               phx-click="load_sample"
-              phx-disable-with="Loading the sample…"
               class="btn btn-ghost btn-sm font-normal text-base-content/70"
             >
               No transcript to hand? Try the sample meeting
