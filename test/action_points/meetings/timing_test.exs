@@ -238,6 +238,57 @@ defmodule ActionPoints.Meetings.TimingTest do
     end
   end
 
+  # The resolver, not its callers, owns the guarantee that a malformed
+  # classification costs the user nothing. `Extractor` is a port: a second
+  # adapter must inherit that guarantee without having to reimplement the
+  # Claude adapter's sanitising.
+  describe "malformed classifications" do
+    test "an unrecognised weekday pins nothing rather than raising" do
+      assert Timing.resolve(weekday(:someday), @tuesday) == nil
+      assert Timing.resolve(weekday(:someday, :this), @tuesday) == nil
+      assert Timing.resolve(weekday(:someday, :next), @tuesday) == nil
+      assert Timing.resolve(%{kind: :weekday}, @tuesday) == nil
+      assert Timing.resolve(%{kind: :weekday, weekday: "monday"}, @tuesday) == nil
+    end
+
+    test "a negative relative day offset pins nothing rather than raising" do
+      assert Timing.resolve(%{kind: :relative_day, offset: -1}, @tuesday) == nil
+      assert Timing.resolve(%{kind: :relative_day, offset: :tomorrow}, @tuesday) == nil
+      assert Timing.resolve(%{kind: :relative_day}, @tuesday) == nil
+    end
+
+    test "an unrecognised kind pins nothing rather than raising" do
+      assert Timing.resolve(%{kind: :fortnight_end}, @tuesday) == nil
+      assert Timing.resolve(%{kind: "weekday", weekday: :monday}, @tuesday) == nil
+      assert Timing.resolve(%{kind: nil}, @tuesday) == nil
+    end
+
+    test "an unrecognised modifier reads as the bare form rather than pinning nothing" do
+      # `modifier` is the one field read for a value rather than validated: an
+      # unrecognised one loses the user nothing but the shift it asked for.
+      assert Timing.resolve(weekday(:wednesday, "next"), @tuesday) ==
+               Timing.resolve(weekday(:wednesday), @tuesday)
+
+      for unit <- [:week, :month, :quarter] do
+        assert Timing.resolve(%{kind: :span_end, modifier: :soon, unit: unit}, @tuesday) ==
+                 Timing.resolve(span(:this, unit), @tuesday)
+      end
+    end
+
+    test "a kind missing the fields it needs pins nothing rather than raising" do
+      assert Timing.resolve(%{kind: :absolute}, @tuesday) == nil
+      assert Timing.resolve(%{kind: :absolute, year: 2026}, @tuesday) == nil
+      assert Timing.resolve(%{kind: :absolute, year: 2026, month: 13, day: 40}, @tuesday) == nil
+      assert Timing.resolve(%{kind: :absolute, year: 2026, month: "07", day: 1}, @tuesday) == nil
+      assert Timing.resolve(%{kind: :span_end}, @tuesday) == nil
+
+      assert Timing.resolve(%{kind: :span_end, modifier: :this, unit: :fortnight}, @tuesday) ==
+               nil
+
+      assert Timing.resolve(%{kind: :duration}, @tuesday) == nil
+    end
+  end
+
   defp weekday(day, modifier \\ nil), do: %{kind: :weekday, weekday: day, modifier: modifier}
 
   defp span(modifier, unit), do: %{kind: :span_end, modifier: modifier, unit: unit}

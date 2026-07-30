@@ -48,3 +48,5 @@ npm-debug.log
 # Hex and Mix caches for the agent toolchain container (docker-compose app service)
 /.mix/
 /.hex/
+# HOME for the same container — elixir_make's precompiled-NIF cache lands here.
+/.home/
