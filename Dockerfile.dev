@@ -1,0 +1,22 @@
+# The toolchain image for ticket agents — NOT a deployment artefact.
+# `Dockerfile` builds the release that ships; this builds a container to work
+# inside, so an agent's mix, deps, and tests never run on the developer's host.
+#
+# Same Elixir and OTP as Dockerfile's builder stage, deliberately: an agent
+# that goes green here should go green in CI and in the release build. Bump
+# these together or the guarantee is gone.
+
+ARG ELIXIR_VERSION=1.18.4
+ARG OTP_VERSION=27.3
+ARG DEBIAN_VERSION=trixie-20260610-slim
+
+FROM docker.io/hexpm/elixir:${ELIXIR_VERSION}-erlang-${OTP_VERSION}-debian-${DEBIAN_VERSION}
+
+# build-essential is not optional: bcrypt_elixir compiles a NIF through
+# elixir_make, so `mix deps.compile` fails without a C toolchain. git is here
+# because heroicons is a git dependency.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends build-essential git \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
