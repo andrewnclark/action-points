@@ -10,6 +10,9 @@ defmodule ActionPoints.Sinks.FakeFlatTaskSink do
   alias ActionPoints.Sinks.FakeTaskSink
 
   @impl true
+  defdelegate supports_hierarchy?(), to: FakeTaskSink
+
+  @impl true
   defdelegate validate_credentials(credentials), to: FakeTaskSink
 
   @impl true

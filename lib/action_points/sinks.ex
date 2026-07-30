@@ -176,7 +176,8 @@ defmodule ActionPoints.Sinks do
       title: action_point.title,
       description: compose_description(action_point),
       assignee_id: action_point.assignee_sink_user_id,
-      due_date: action_point.due_date
+      due_date: action_point.due_date,
+      parent_id: parent_sink_issue_id(action_point)
     }
 
     case task_sink().push_task(%{api_key: connection.api_key}, connection.team_id, task) do
@@ -189,6 +190,32 @@ defmodule ActionPoints.Sinks do
         {:error, {reason, Enum.reverse(pushed), length(rest) + 1}}
     end
   end
+
+  # The parent issue a Subtask attaches to, read from the parent's recorded
+  # sink issue id at the moment of the child's own create: Push orders
+  # parents first, so within one call the parent's id is already recorded —
+  # and after a partial failure, a retry finds the id the first attempt
+  # recorded, attaching late children to the existing parent instead of
+  # duplicating or detaching anything. A sink that cannot represent
+  # hierarchy is never handed it (Review said so visibly), and a parent
+  # whose id is somehow missing degrades to a top-level task rather than
+  # blocking the Push.
+  defp parent_sink_issue_id(%{parent_id: nil}), do: nil
+
+  defp parent_sink_issue_id(%{parent_id: parent_id}) do
+    if task_sink().supports_hierarchy?() do
+      Meetings.get_action_point_sink_issue_id(parent_id)
+    else
+      nil
+    end
+  end
+
+  @doc """
+  Whether the configured Task Sink can represent Subtasks as natively nested
+  tasks. Review uses it to say out loud, before any Push, that a flat sink
+  will receive a Review's Subtasks as ordinary top-level tasks.
+  """
+  def hierarchy_supported?, do: task_sink().supports_hierarchy?()
 
   # The pushed description is the model's prose plus a "From the meeting"
   # section of the surviving Grounding Quotes — composed here, at Push, and

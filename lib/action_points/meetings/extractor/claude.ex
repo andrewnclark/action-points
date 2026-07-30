@@ -22,9 +22,25 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
     task itself, keep the description short rather than padding it
   - assignee_guess: the person responsible, grounded in the speaker labels
     when the transcript has them; null when nobody was clearly responsible
-  - due_date: an ISO 8601 date, only when a date was actually said aloud
-    (resolve relative dates against the transcript's context if possible,
-    otherwise leave null); never invent one
+  - timing: how the meeting talked about this task's deadline, classified.
+    Never compute, resolve, or infer a calendar date — report the kind of
+    timing language you heard and its parts exactly as spoken; the
+    application does the calendar arithmetic. The kinds:
+    - "absolute": an actual calendar date was said aloud — report its day,
+      month, and year as numbers, with a null year when none was said
+    - "weekday": a day of the week was named ("by Wednesday") — report the
+      weekday, and the modifier "this" or "next" when one was said, null
+      when the weekday stood bare
+    - "relative_day": "today" or "tomorrow" — report the offset in days,
+      zero for today, one for tomorrow
+    - "span_end": the end of a period ("by the end of the week") — report
+      whether it was this or next, and whether a week, month, or quarter
+    - "duration": a length of time out ("in two weeks") — report the unit
+      and the count
+    - "vague": a deadline was voiced but pins down no date ("soon", "before
+      the launch", "when things calm down")
+    - null: no deadline was mentioned at all. Never invent timing that was
+      not said aloud
   - quotes: up to three short verbatim excerpts from the transcript — the
     decision-bearing words actually spoken about this task. Copy them
     character for character from the transcript; every quote is checked
@@ -37,20 +53,107 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
     finishes the migration", "once that's done", "after the review lands".
     Tasks that merely share a topic, a person, or a deadline are not
     dependencies. Most action points have none: an empty list is the norm.
+  - parent: null almost always. Set it — to another action point's 1-based
+    position in your own list — only when the meeting itself broke a named
+    deliverable into pieces aloud ("the onboarding revamp: Alice takes the
+    copy, Bob the new flow") and this action point is one of those spoken
+    pieces; then its parent is the deliverable's own action point. Action
+    points that are merely related, on the same topic, or plausibly
+    groupable do NOT have a parent — related topics are not a parent, and
+    when in doubt report null. Never nest deeper than one level: a parent
+    must itself have parent null.
 
   Alongside the Action Points, report meeting_date: the date this meeting
   itself took place, as an ISO 8601 date, but only when the transcript states
-  it outright — a header line such as "Date: 4 May 2026", or a speaker saying
-  what today's date is. A date merely mentioned in the conversation is not the
-  meeting's own date: "the board meets on the 3rd" and "we shipped it on the
-  12th" are both null. When nothing states when this meeting happened, report
-  null rather than guessing.
+  it outright — a header line naming the meeting's own date, or a speaker
+  saying what today's date is. A date merely mentioned in the conversation is
+  not the meeting's own date: a deadline, another event's date, or a date
+  something shipped on are all null here. When nothing states when this
+  meeting happened, report null rather than guessing.
 
   Include vague or tentative commitments ("we should probably look into
   that") as their own Action Points — the user rejects noise during Review,
   so it is better to surface a doubtful item than to silently drop it.
   Do not invent tasks that were not discussed.
   """
+
+  @weekday_names %{
+    "monday" => :monday,
+    "tuesday" => :tuesday,
+    "wednesday" => :wednesday,
+    "thursday" => :thursday,
+    "friday" => :friday,
+    "saturday" => :saturday,
+    "sunday" => :sunday
+  }
+
+  @span_units %{"week" => :week, "month" => :month, "quarter" => :quarter}
+  @duration_units %{"day" => :day, "week" => :week, "month" => :month}
+
+  # The timing classification: a tagged union, `kind` the tag. `vague` has
+  # nowhere to put a date by construction — the boundary between pinnable and
+  # unpinnable language is the schema's, not the prompt's to ask for.
+  @timing_schema %{
+    "anyOf" => [
+      %{"type" => "null"},
+      %{
+        "type" => "object",
+        "properties" => %{
+          "kind" => %{"enum" => ["absolute"]},
+          "year" => %{"anyOf" => [%{"type" => "integer"}, %{"type" => "null"}]},
+          "month" => %{"type" => "integer"},
+          "day" => %{"type" => "integer"}
+        },
+        "required" => ["kind", "year", "month", "day"],
+        "additionalProperties" => false
+      },
+      %{
+        "type" => "object",
+        "properties" => %{
+          "kind" => %{"enum" => ["weekday"]},
+          "weekday" => %{"enum" => Map.keys(@weekday_names)},
+          "modifier" => %{"anyOf" => [%{"enum" => ["this", "next"]}, %{"type" => "null"}]}
+        },
+        "required" => ["kind", "weekday", "modifier"],
+        "additionalProperties" => false
+      },
+      %{
+        "type" => "object",
+        "properties" => %{
+          "kind" => %{"enum" => ["relative_day"]},
+          "offset" => %{"type" => "integer"}
+        },
+        "required" => ["kind", "offset"],
+        "additionalProperties" => false
+      },
+      %{
+        "type" => "object",
+        "properties" => %{
+          "kind" => %{"enum" => ["span_end"]},
+          "modifier" => %{"enum" => ["this", "next"]},
+          "unit" => %{"enum" => Map.keys(@span_units)}
+        },
+        "required" => ["kind", "modifier", "unit"],
+        "additionalProperties" => false
+      },
+      %{
+        "type" => "object",
+        "properties" => %{
+          "kind" => %{"enum" => ["duration"]},
+          "unit" => %{"enum" => Map.keys(@duration_units)},
+          "count" => %{"type" => "integer"}
+        },
+        "required" => ["kind", "unit", "count"],
+        "additionalProperties" => false
+      },
+      %{
+        "type" => "object",
+        "properties" => %{"kind" => %{"enum" => ["vague"]}},
+        "required" => ["kind"],
+        "additionalProperties" => false
+      }
+    ]
+  }
 
   @output_schema %{
     "type" => "object",
@@ -66,9 +169,7 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
             "title" => %{"type" => "string"},
             "description" => %{"type" => "string"},
             "assignee_guess" => %{"anyOf" => [%{"type" => "string"}, %{"type" => "null"}]},
-            "due_date" => %{
-              "anyOf" => [%{"type" => "string", "format" => "date"}, %{"type" => "null"}]
-            },
+            "timing" => @timing_schema,
             # No `maxItems`: structured outputs reject it outright ("For
             # 'array' type, property 'maxItems' is not supported"), failing the
             # whole request. The cap is the prompt's to ask for and
@@ -77,14 +178,20 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
             # Sibling positions this Action Point waits on. Anything the
             # schema can't say — position bounds, no self-references, no
             # cycles — is `Blocker.sanitise/1`'s to enforce at finalise.
-            "blocked_by" => %{"type" => "array", "items" => %{"type" => "integer"}}
+            "blocked_by" => %{"type" => "array", "items" => %{"type" => "integer"}},
+            # A Subtask's parent by 1-based position; the finalise-time
+            # hygiene in Meetings enforces the one-level cap and drops
+            # self/dangling references, so a bad value can never fail the
+            # Extraction.
+            "parent" => %{"anyOf" => [%{"type" => "integer"}, %{"type" => "null"}]}
           },
           "required" => [
             "title",
             "description",
             "assignee_guess",
-            "due_date",
+            "timing",
             "quotes",
+            "parent",
             "blocked_by"
           ],
           "additionalProperties" => false
@@ -152,16 +259,71 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
       title: action_point["title"],
       description: action_point["description"],
       assignee_guess: action_point["assignee_guess"],
-      due_date: parse_date(action_point["due_date"]),
+      timing: parse_timing(action_point["timing"]),
       quotes: action_point["quotes"] || [],
+      parent: parse_parent(action_point["parent"]),
       blocked_by: action_point["blocked_by"] || []
     }
   end
 
-  # Used for both the meeting date and each Action Point's due date. Anything
-  # the schema should have prevented — a missing key, a phrase like "last
-  # Tuesday", a number — reads as no date rather than as a failed Extraction: a
-  # malformed date must never cost the user their Action Points.
+  # Anything but a plausible position reads as no parent — like malformed
+  # timing, a malformed reference must never cost the user their Action Points.
+  defp parse_parent(parent) when is_integer(parent) and parent >= 1, do: parent
+  defp parse_parent(_), do: nil
+
+  # Reads the model's timing classification into the tagged union
+  # `ActionPoints.Meetings.Timing` resolves. Anything the schema should have
+  # prevented — an unknown kind, a misspelt weekday, a missing field — reads
+  # as no classification rather than as a failed Extraction: malformed timing
+  # must never cost the user their Action Points.
+  defp parse_timing(%{"kind" => "absolute", "year" => year, "month" => month, "day" => day})
+       when (is_integer(year) or is_nil(year)) and is_integer(month) and is_integer(day) do
+    %{kind: :absolute, year: year, month: month, day: day}
+  end
+
+  defp parse_timing(%{"kind" => "weekday", "weekday" => weekday} = timing) do
+    with %{^weekday => day} <- @weekday_names,
+         {:ok, modifier} <- parse_modifier(timing["modifier"]) do
+      %{kind: :weekday, weekday: day, modifier: modifier}
+    else
+      _ -> nil
+    end
+  end
+
+  defp parse_timing(%{"kind" => "relative_day", "offset" => offset})
+       when is_integer(offset) and offset >= 0 do
+    %{kind: :relative_day, offset: offset}
+  end
+
+  defp parse_timing(%{"kind" => "span_end", "modifier" => modifier, "unit" => unit}) do
+    with {:ok, m} when m in [:this, :next] <- parse_modifier(modifier),
+         %{^unit => u} <- @span_units do
+      %{kind: :span_end, modifier: m, unit: u}
+    else
+      _ -> nil
+    end
+  end
+
+  defp parse_timing(%{"kind" => "duration", "unit" => unit, "count" => count})
+       when is_integer(count) and count > 0 do
+    case @duration_units do
+      %{^unit => u} -> %{kind: :duration, unit: u, count: count}
+      _ -> nil
+    end
+  end
+
+  defp parse_timing(%{"kind" => "vague"}), do: %{kind: :vague}
+  defp parse_timing(_), do: nil
+
+  defp parse_modifier("this"), do: {:ok, :this}
+  defp parse_modifier("next"), do: {:ok, :next}
+  defp parse_modifier(nil), do: {:ok, nil}
+  defp parse_modifier(_), do: :error
+
+  # Used for the meeting date. Anything the schema should have prevented — a
+  # missing key, a phrase like "last Tuesday", a number — reads as no date
+  # rather than as a failed Extraction: a malformed date must never cost the
+  # user their Action Points.
   defp parse_date(iso8601) when is_binary(iso8601) do
     case Date.from_iso8601(iso8601) do
       {:ok, date} -> date

@@ -12,7 +12,11 @@ defmodule ActionPoints.Meetings.Extractor do
           required(:title) => String.t(),
           required(:description) => String.t() | nil,
           required(:assignee_guess) => String.t() | nil,
-          required(:due_date) => Date.t() | nil,
+          # What kind of timing language the meeting used about this task's
+          # deadline — never a computed date. The model classifies; the
+          # application resolves the classification against the Meeting Date
+          # (`ActionPoints.Meetings.Timing`).
+          required(:timing) => ActionPoints.Meetings.Timing.classification() | nil,
           # Up to three candidate Grounding Quotes — claimed verbatim by the
           # model, verified against the Transcript only when the Extraction
           # finalises.
@@ -22,7 +26,13 @@ defmodule ActionPoints.Meetings.Extractor do
           # the transcript states the ordering. Sanitised (self-references,
           # cycles, duplicates, dangling positions) when the Extraction
           # finalises.
-          required(:blocked_by) => [pos_integer()]
+          required(:blocked_by) => [pos_integer()],
+          # A Subtask's parent, as the sibling's 1-based position in this
+          # result — proposed only when the meeting itself broke the
+          # deliverable down aloud. Self, dangling, and deeper-than-one-level
+          # references are mechanically dropped when the Extraction finalises;
+          # hygiene never fails an Extraction.
+          optional(:parent) => pos_integer() | nil
         }
 
   @typedoc """

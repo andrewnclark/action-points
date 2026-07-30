@@ -36,7 +36,7 @@ defmodule ActionPoints.MeetingsTest do
   defp extract_action_point(extra_attrs) do
     attrs =
       Map.merge(
-        %{title: "Send the Q3 report", description: nil, assignee_guess: nil, due_date: nil},
+        %{title: "Send the Q3 report", description: nil, assignee_guess: nil, timing: nil},
         extra_attrs
       )
 
@@ -262,6 +262,75 @@ defmodule ActionPoints.MeetingsTest do
     end
   end
 
+  describe "due date resolution" do
+    # The model classifies, the application resolves: the Extractor reports
+    # timing language and the due date is Timing's arithmetic over it,
+    # anchored on the Meeting Date, performed as the Extraction finalises.
+
+    defp run_with_timing(timing, opts) do
+      stub_extractor(
+        {:ok,
+         %{
+           action_points: [
+             %{
+               title: "Draft the pricing page copy",
+               description: nil,
+               assignee_guess: "Andrew",
+               timing: timing
+             }
+           ],
+           meeting_date: Keyword.get(opts, :stated_meeting_date)
+         }}
+      )
+
+      {:ok, extraction} =
+        Meetings.create_extraction(
+          nil,
+          "session",
+          %{"transcript_text" => @transcript},
+          Keyword.take(opts, [:local_date])
+        )
+
+      Meetings.run_extraction(extraction)
+      Meetings.get_extraction!(extraction.id, "session").action_points |> hd()
+    end
+
+    test "a weekday classification resolves against the meeting date and is stored" do
+      # "…ready for review by Wednesday", said in a Monday meeting.
+      action_point =
+        run_with_timing(%{kind: :weekday, weekday: :wednesday, modifier: nil},
+          local_date: ~D[2026-07-27]
+        )
+
+      assert action_point.due_date == ~D[2026-07-29]
+    end
+
+    test "a meeting date stated in the Transcript is the anchor, not the assumed one" do
+      # The stated date arrives in the same result the classifications do —
+      # resolution must use it, not the date settled at creation.
+      action_point =
+        run_with_timing(%{kind: :weekday, weekday: :wednesday, modifier: nil},
+          local_date: ~D[2026-07-27],
+          stated_meeting_date: ~D[2026-05-04]
+        )
+
+      assert action_point.due_date == ~D[2026-05-06]
+    end
+
+    test "a vague classification produces an Action Point with no due date" do
+      action_point =
+        run_with_timing(%{kind: :vague}, local_date: ~D[2026-07-27])
+
+      assert action_point.due_date == nil
+    end
+
+    test "no classification produces an Action Point with no due date" do
+      action_point = run_with_timing(nil, local_date: ~D[2026-07-27])
+
+      assert action_point.due_date == nil
+    end
+  end
+
   describe "credit consumption" do
     test "a successful authed Extraction consumes exactly one Credit, in the ledger" do
       scope = user_scope_fixture()
@@ -323,7 +392,7 @@ defmodule ActionPoints.MeetingsTest do
       assert Billing.balance(scope) == 1
 
       stub_extractor(
-        {:ok, [%{title: "Follow up", description: nil, assignee_guess: nil, due_date: nil}]}
+        {:ok, [%{title: "Follow up", description: nil, assignee_guess: nil, timing: nil}]}
       )
 
       extraction = Meetings.get_extraction!(extraction.id, "session")

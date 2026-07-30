@@ -42,6 +42,13 @@ defmodule ActionPoints.Meetings.ActionPoint do
     # pointing at a sibling of the same Extraction and only ever a sibling.
     has_many :blockers, ActionPoints.Meetings.Blocker, preload_order: [asc: :id]
 
+    # A Subtask's parent (see CONTEXT.md): another Action Point of the same
+    # Extraction, exactly one level deep — set only when the meeting itself
+    # broke the deliverable down aloud, and freely restructured at Review.
+    # Orthogonal to Blockers by fiat: nesting carries no other semantics.
+    belongs_to :parent, __MODULE__, foreign_key: :parent_id
+    has_many :subtasks, __MODULE__, foreign_key: :parent_id
+
     timestamps(type: :utc_datetime)
   end
 

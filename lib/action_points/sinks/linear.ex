@@ -8,6 +8,11 @@ defmodule ActionPoints.Sinks.Linear do
 
   @url "https://api.linear.app/graphql"
 
+  # Linear issues nest natively — a Subtask arrives as a real sub-issue via
+  # the create mutation's parentId, and progress rolls up in the tracker.
+  @impl true
+  def supports_hierarchy?, do: true
+
   @impl true
   def validate_credentials(credentials) do
     case query(credentials, "{ viewer { id } }", %{}) do
@@ -62,7 +67,8 @@ defmodule ActionPoints.Sinks.Linear do
         "title" => task.title,
         "description" => task.description,
         "assigneeId" => task.assignee_id,
-        "dueDate" => task.due_date && Date.to_iso8601(task.due_date)
+        "dueDate" => task.due_date && Date.to_iso8601(task.due_date),
+        "parentId" => task.parent_id
       }
       |> Enum.reject(fn {_key, value} -> is_nil(value) end)
       |> Map.new()

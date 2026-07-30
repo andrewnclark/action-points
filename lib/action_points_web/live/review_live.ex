@@ -156,6 +156,23 @@ defmodule ActionPointsWeb.ReviewLive do
               </p>
             </div>
 
+            <%!-- A flat sink is told about before Push, not discovered after:
+            the hierarchy survives Review either way, it just can't be
+            represented over there. Same optional-capability shape as the
+            degraded assignee fetch above. --%>
+            <div
+              :if={@sink_live? and not @hierarchy_supported? and @subtask_count > 0}
+              id="hierarchy-unsupported-notice"
+              class="mb-4 flex gap-3 rounded-box border border-warning/40 bg-warning/10 p-4"
+              role="alert"
+            >
+              <.icon name="hero-exclamation-triangle" class="size-5 shrink-0 text-warning" />
+              <p class="text-base-content/70">
+                This Task Sink can't represent Subtasks, so Pushing creates them as
+                ordinary top-level tasks. The nesting below still shapes your Review.
+              </p>
+            </div>
+
             <div
               :if={@push_failure}
               id="push-failure"
@@ -232,8 +249,10 @@ defmodule ActionPointsWeb.ReviewLive do
                 :for={{dom_id, action_point} <- @streams.action_points}
                 id={dom_id}
                 data-status={action_point.status}
+                data-parent-id={action_point.parent_id}
                 class={[
                   "group relative rounded-box border p-4 transition-colors",
+                  action_point.parent_id && "ml-6 sm:ml-10",
                   card_class(@editing, action_point)
                 ]}
               >
@@ -290,6 +309,19 @@ defmodule ActionPointsWeb.ReviewLive do
                       {action_point.title}
                     </h2>
                     <div class="flex shrink-0 gap-0.5 opacity-60 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                      <%!-- A wrong nesting costs one click: promote lifts the
+                      Subtask to top level. Gone once pushed — the sink-side
+                      hierarchy was already created. --%>
+                      <button
+                        :if={action_point.parent_id && is_nil(action_point.sink_issue_id)}
+                        id={"#{dom_id}-promote"}
+                        phx-click="promote"
+                        phx-value-id={action_point.id}
+                        class="btn btn-ghost btn-xs"
+                        title="Promote to top level"
+                      >
+                        <.icon name="hero-arrow-up-left-micro" class="size-3.5" /> Promote
+                      </button>
                       <%= cond do %>
                         <% action_point.sink_issue_id -> %>
                           <a
@@ -386,6 +418,39 @@ defmodule ActionPointsWeb.ReviewLive do
                     </ul>
                   </details>
                   <div class="mt-3 flex flex-wrap items-center gap-1.5">
+                    <.chip
+                      :if={action_point.parent_id}
+                      role="subtask"
+                      icon="hero-arrow-turn-down-right-micro"
+                    >
+                      Subtask
+                    </.chip>
+                    <%!-- Structure the model missed can still be added: any
+                    top-level Action Point can be nested under another of the
+                    meeting's Action Points — one level, no deeper. --%>
+                    <form
+                      :if={parent_pickable?(action_point, @eligible_parents)}
+                      id={"action-point-#{action_point.id}-parent-form"}
+                      phx-change="set_parent"
+                      phx-value-id={action_point.id}
+                      class="inline-flex items-center gap-1.5"
+                    >
+                      <select
+                        id={"action-point-#{action_point.id}-parent"}
+                        name="parent_id"
+                        data-role="parent-picker"
+                        class="select select-xs w-auto max-w-[16rem]"
+                      >
+                        <option value="" selected>Top level</option>
+                        <option
+                          :for={parent <- @eligible_parents}
+                          :if={parent.id != action_point.id}
+                          value={parent.id}
+                        >
+                          Subtask of: {parent.title}
+                        </option>
+                      </select>
+                    </form>
                     <.assignee_field
                       action_point={action_point}
                       sink_users={@sink_users}
@@ -675,6 +740,7 @@ defmodule ActionPointsWeb.ReviewLive do
     {:ok,
      socket
      |> assign(:local_date, LocalDate.from_connect_params(socket))
+     |> assign(:hierarchy_supported?, Sinks.hierarchy_supported?())
      |> assign_resolved_extraction(connected?(socket), extraction)}
   end
 
@@ -772,6 +838,39 @@ defmodule ActionPointsWeb.ReviewLive do
       # and the refresh un-stales it.
       {:error, _refused} ->
         {:noreply, refresh_all_action_points(socket)}
+    end
+  end
+
+  def handle_event("promote", %{"id" => id}, socket) do
+    action_point = Meetings.get_action_point!(id, socket.assigns.extraction.session_token)
+
+    case Meetings.set_action_point_parent(action_point, nil) do
+      {:ok, _promoted} ->
+        {:noreply, assign_extraction(socket, refetch_extraction(socket))}
+
+      # The card offered no such control — a stale or forged event is a no-op.
+      {:error, _reason} ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("set_parent", %{"id" => id, "parent_id" => ""}, socket) do
+    handle_event("promote", %{"id" => id}, socket)
+  end
+
+  def handle_event("set_parent", %{"id" => id, "parent_id" => parent_id}, socket) do
+    session_token = socket.assigns.extraction.session_token
+    action_point = Meetings.get_action_point!(id, session_token)
+    parent = Meetings.get_action_point!(parent_id, session_token)
+
+    case Meetings.set_action_point_parent(action_point, parent) do
+      {:ok, _nested} ->
+        {:noreply, assign_extraction(socket, refetch_extraction(socket))}
+
+      # A stale picker (the chosen parent was nested meanwhile, or this row
+      # was pushed) is a no-op, not an error screen.
+      {:error, _reason} ->
+        {:noreply, socket}
     end
   end
 
@@ -925,13 +1024,17 @@ defmodule ActionPointsWeb.ReviewLive do
     end
   end
 
+  # A status change re-renders the whole Review rather than patching one
+  # card: rejecting a parent promotes its Subtasks — a rule, not an option —
+  # so sibling cards and the parent-picker options move with it.
   defp set_status(socket, id, status) do
     id
     |> Meetings.get_action_point!(socket.assigns.extraction.session_token)
     |> Meetings.set_action_point_status(status)
 
-    # A rejection also removed the Blockers pointing at this Action Point, so
-    # other cards' chips and pickers changed too — refresh them all.
+    # A rejection also removed this Action Point's Blockers and promoted its
+    # Subtasks, so other cards' chips, pickers, and nesting changed too —
+    # refresh the whole list.
     refresh_all_action_points(socket)
   end
 
@@ -1022,8 +1125,7 @@ defmodule ActionPointsWeb.ReviewLive do
     |> assign(:push_failure, nil)
     |> assign(:relations_supported?, Sinks.supports_relations?())
     |> assign_action_point_aggregates(action_points)
-    |> assign(:pushed_action_points, Enum.filter(action_points, & &1.sink_issue_id))
-    |> stream(:action_points, action_points, reset: true)
+    |> stream(:action_points, Meetings.order_for_review(action_points), reset: true)
   end
 
   defp assign_action_point_aggregates(socket, action_points) do
@@ -1036,6 +1138,12 @@ defmodule ActionPointsWeb.ReviewLive do
     |> assign(
       :blocker_options,
       Enum.map(action_points, &%{id: &1.id, title: &1.title, status: &1.status})
+    )
+    |> assign(:pushed_action_points, Enum.filter(action_points, & &1.sink_issue_id))
+    |> assign(:subtask_count, Enum.count(action_points, & &1.parent_id))
+    |> assign(
+      :eligible_parents,
+      Enum.filter(action_points, &(is_nil(&1.parent_id) and &1.status == :accepted))
     )
   end
 
@@ -1062,6 +1170,14 @@ defmodule ActionPointsWeb.ReviewLive do
     Enum.reject(blocker_options, fn option ->
       option.id == action_point.id or option.status == :rejected or option.id in existing
     end)
+  end
+
+  # The parent picker belongs on a card that can still be nested: top-level,
+  # accepted, unpushed, with at least one other Action Point to nest under.
+  defp parent_pickable?(action_point, eligible_parents) do
+    is_nil(action_point.parent_id) and action_point.status == :accepted and
+      is_nil(action_point.sink_issue_id) and
+      Enum.any?(eligible_parents, &(&1.id != action_point.id))
   end
 
   defp refetch_extraction(socket) do

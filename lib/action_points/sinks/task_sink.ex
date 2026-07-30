@@ -22,7 +22,12 @@ defmodule ActionPoints.Sinks.TaskSink do
           required(:title) => String.t(),
           required(:description) => String.t() | nil,
           required(:assignee_id) => String.t() | nil,
-          required(:due_date) => Date.t() | nil
+          required(:due_date) => Date.t() | nil,
+          # The already-created parent issue this task nests under, natively,
+          # in the sink — or nil for a top-level task. Only ever set for a
+          # sink whose `supports_hierarchy?/0` is true — a flat sink is never
+          # handed hierarchy to silently drop.
+          required(:parent_id) => String.t() | nil
         }
 
   @type created_task :: %{
@@ -41,6 +46,12 @@ defmodule ActionPoints.Sinks.TaskSink do
   @type created_relation :: %{required(:id) => String.t()}
 
   @type failure :: :invalid_key | :rate_limited | :unavailable | :api_error
+
+  # Optional capabilities: a sink states what it can represent, and callers
+  # degrade visibly rather than silently. Hierarchy is the first — a sink
+  # without it receives Subtasks as ordinary top-level tasks, and Review says
+  # so out loud.
+  @callback supports_hierarchy?() :: boolean()
 
   @callback validate_credentials(credentials()) :: :ok | {:error, failure()}
   @callback list_teams(credentials()) :: {:ok, [team()]} | {:error, failure()}
