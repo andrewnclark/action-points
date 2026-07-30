@@ -239,6 +239,98 @@ defmodule ActionPoints.Sinks.PushTest do
              sink_pushes()
   end
 
+  test "the Timing Quote joins the From the meeting section, last", %{scope: scope} do
+    extraction =
+      create_review([
+        %{
+          title: "Send the Q3 report to finance",
+          description: "Priya committed to sending the Q3 report to finance.",
+          timing: %{kind: :absolute, year: 2026, month: 7, day: 31},
+          timing_quote: "no rush on that one",
+          quotes: ["I'll send the Q3 report to finance by Friday."]
+        }
+      ])
+
+    {:ok, _pushed} = Sinks.push(scope, extraction)
+
+    assert [{_, %{description: description, due_date: ~D[2026-07-31]}}] = sink_pushes()
+
+    assert description == """
+           Priya committed to sending the Q3 report to finance.
+
+           ### From the meeting
+
+           > I'll send the Q3 report to finance by Friday.
+
+           > no rush on that one\
+           """
+  end
+
+  test "a Timing Quote a Grounding Quote already contains is not repeated", %{scope: scope} do
+    extraction =
+      create_review([
+        %{
+          title: "Send the Q3 report to finance",
+          description: nil,
+          timing: nil,
+          timing_quote: "by Friday",
+          quotes: ["I'll send the Q3 report to finance by Friday."]
+        }
+      ])
+
+    {:ok, _pushed} = Sinks.push(scope, extraction)
+
+    assert [{_, %{description: description}}] = sink_pushes()
+
+    assert description == """
+           ### From the meeting
+
+           > I'll send the Q3 report to finance by Friday.\
+           """
+  end
+
+  test "a Timing Quote with no resolved due date still reaches the pushed task", %{scope: scope} do
+    extraction =
+      create_review([
+        %{
+          title: "Book the offsite venue",
+          description: nil,
+          timing: %{kind: :vague},
+          timing_quote: "no rush on that one",
+          quotes: []
+        }
+      ])
+
+    {:ok, _pushed} = Sinks.push(scope, extraction)
+
+    assert [{_, %{description: description, due_date: nil}}] = sink_pushes()
+
+    assert description == """
+           ### From the meeting
+
+           > no rush on that one\
+           """
+  end
+
+  test "an Action Point with neither quotes nor a Timing Quote pushes with no section", %{
+    scope: scope
+  } do
+    extraction =
+      create_review([
+        %{
+          title: "Circulate the meeting notes",
+          description: "Priya will circulate the notes.",
+          timing: nil,
+          timing_quote: nil,
+          quotes: []
+        }
+      ])
+
+    {:ok, _pushed} = Sinks.push(scope, extraction)
+
+    assert [{_, %{description: "Priya will circulate the notes."}}] = sink_pushes()
+  end
+
   test "quotes without prose push as just the From the meeting section", %{scope: scope} do
     extraction =
       create_review([

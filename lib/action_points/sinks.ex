@@ -218,15 +218,35 @@ defmodule ActionPoints.Sinks do
   def hierarchy_supported?, do: task_sink().supports_hierarchy?()
 
   # The pushed description is the model's prose plus a "From the meeting"
-  # section of the surviving Grounding Quotes — composed here, at Push, and
-  # never stored, so the format (or the whole feature) can change without a
-  # data migration (issue #24). Each quote is its own blockquote: human
-  # speech visibly set apart from model prose. No quotes, no section.
-  defp compose_description(%{quotes: [], description: description}), do: description
+  # section of the surviving quotes — composed here, at Push, and never
+  # stored, so the format (or the whole feature) can change without a data
+  # migration (issue #24). Each quote is its own blockquote: human speech
+  # visibly set apart from model prose. No quotes, no section.
+  #
+  # The Timing Quote joins the same section rather than earning one of its
+  # own (issue #37): to the reader of the created task it is one more thing
+  # the meeting actually said, and it belongs there whether or not a due date
+  # was resolved from it. It goes last, nearest the task's own due date.
+  defp compose_description(action_point) do
+    %{quotes: quotes, timing_quote: timing_quote, description: description} = action_point
 
-  defp compose_description(%{quotes: quotes, description: description}) do
-    section =
-      "### From the meeting\n\n" <> Enum.map_join(quotes, "\n\n", &("> " <> &1))
+    compose_section(quotes ++ timing_blockquote(quotes, timing_quote), description)
+  end
+
+  # A Timing Quote is usually a few words out of the same sentence a Grounding
+  # Quote already carries, and the same words twice in a row read as a bug to
+  # whoever opens the task. When one contains the other, the section says it
+  # once — the fuller quote, which is the one that also carries the decision.
+  defp timing_blockquote(_quotes, nil), do: []
+
+  defp timing_blockquote(quotes, timing_quote) do
+    if Enum.any?(quotes, &String.contains?(&1, timing_quote)), do: [], else: [timing_quote]
+  end
+
+  defp compose_section([], description), do: description
+
+  defp compose_section(quotes, description) do
+    section = "### From the meeting\n\n" <> Enum.map_join(quotes, "\n\n", &("> " <> &1))
 
     case description do
       nil -> section
