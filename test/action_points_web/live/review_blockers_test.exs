@@ -45,14 +45,6 @@ defmodule ActionPointsWeb.ReviewBlockersTest do
 
   defp dom_id(action_point), do: "action_points-#{action_point.id}"
   defp chip(action_point), do: "##{dom_id(action_point)} [data-role=blocker]"
-  defp picker_form(action_point), do: "#action-point-#{action_point.id}-blocker-form"
-  defp picker(action_point), do: "#action-point-#{action_point.id}-blocker-picker"
-
-  defp add_blocker(review, action_point, blocked_by) do
-    review
-    |> element(picker_form(action_point))
-    |> render_change(%{"blocked_by_id" => to_string(blocked_by.id)})
-  end
 
   test "a proposed relation renders as a blocked-by chip on the blocked Action Point", %{
     conn: conn
@@ -80,32 +72,15 @@ defmodule ActionPointsWeb.ReviewBlockersTest do
     refute has_element?(reloaded, chip(second))
   end
 
-  test "a relation can be added between any two of the Extraction's Action Points", %{
-    conn: conn
-  } do
-    %{review: review, conn: conn, path: path, action_points: [first, _second, third]} =
-      open_review(conn)
+  # ADR-0009: a relation is an edge the meeting either drew or did not. Review
+  # can take one away; it cannot put one there.
+  test "no card offers a control for authoring a relation", %{conn: conn} do
+    %{review: review, action_points: action_points} = open_review(conn)
 
-    add_blocker(review, third, first)
-
-    assert has_element?(review, chip(third), "Migrate the database")
-
-    {:ok, reloaded, _html} = live(conn, path)
-    assert has_element?(reloaded, chip(third), "Migrate the database")
-  end
-
-  test "the picker offers neither the Action Point itself, its blockers, nor rejected ones", %{
-    conn: conn
-  } do
-    %{review: review, action_points: [first, second, third]} = open_review(conn)
-
-    refute has_element?(review, "#{picker(second)} option[value='#{second.id}']")
-    refute has_element?(review, "#{picker(second)} option[value='#{first.id}']")
-    assert has_element?(review, "#{picker(second)} option[value='#{third.id}']")
-
-    review |> element("##{dom_id(third)}-reject") |> render_click()
-
-    refute has_element?(review, "#{picker(second)} option[value='#{third.id}']")
+    for action_point <- action_points do
+      refute has_element?(review, "#action-point-#{action_point.id}-blocker-form")
+      refute has_element?(review, "##{dom_id(action_point)} [data-role=blocker-picker]")
+    end
   end
 
   test "rejecting an Action Point removes the chips pointing at it", %{conn: conn} do
@@ -114,16 +89,6 @@ defmodule ActionPointsWeb.ReviewBlockersTest do
     review |> element("##{dom_id(first)}-reject") |> render_click()
 
     refute has_element?(review, chip(second))
-  end
-
-  test "an addition that would close a circle is refused with an explanation", %{conn: conn} do
-    %{review: review, action_points: [first, second, _third]} = open_review(conn)
-
-    # Deploy already waits on the migration; the reverse would be a circle.
-    add_blocker(review, first, second)
-
-    refute has_element?(review, chip(first))
-    assert has_element?(review, "#flash-error", "block each other in a circle")
   end
 
   describe "the relation capability note" do

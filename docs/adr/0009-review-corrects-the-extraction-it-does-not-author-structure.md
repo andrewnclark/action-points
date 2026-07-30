@@ -1,0 +1,16 @@
+# Review corrects the Extraction; it does not author structure
+
+Review's job is to verify what the meeting said. A user may reject an Action Point, edit its attributes, and remove a relation the model proposed. A user may not create a relation the meeting did not contain. Organising work is the Task Sink's job — that is what the Task Sink is for.
+
+The distinction that makes the rule operable is between edges and attributes. **Relationships between Action Points** — nesting, Blockers — are edges between two extracted things: the meeting either drew them or it did not, so they are not authorable at Review. **Attributes of one Action Point** — title, description, due date, assignee — are properties of a thing the meeting really did create, so they are correctable at Review. Removing an edge is correcting an extraction and stays; the Blocker chip's `✕` and the `Promote` button both survive for exactly that reason, `Promote` being the undo of a nesting the model proposed rather than the authoring of one.
+
+The assignee picker is worth stating explicitly, because it looks like a counter-example and is not. It does not assign a person; the meeting already named one. It records *which account in your workspace that person is* — a resolution, not a creation. ADR-0007 already established that this resolution belongs at Review.
+
+The glossary had implied the rule for nesting all along — a Subtask is "proposed only when the meeting itself broke a deliverable into pieces", which is something the **meeting** does — and a parent picker was built past that definition without anyone noticing. This ADR is partly a record of the glossary having been right. On Blockers the glossary was looser ("curated at Review"), and "curated" could be read as covering additions; the call to treat both relations the same was made deliberately, because a rule that applies to one relation and not the other is a preference rather than a rule. Nobody should re-open it as an inconsistency. ADR-0005 describes Review as one that "rejects, accepts, and edits"; this ADR is that sentence made enforceable.
+
+## Consequences
+
+- A dependency the meeting stated but the model missed cannot be added at Review. It is added in the Task Sink. This is a real, accepted cost.
+- Rejecting an Action Point still promotes its Subtasks and drops its Blockers, and re-accepting it rebuilds neither — Review has no control left that could. Nothing is lost but the edges: the children are top-level Action Points, accepted and pushable, carrying everything else they had. A mis-click therefore costs the meeting's structure, not its work, and the structure is put back where all structure is put back — in the sink, after the Push. Keeping a general nesting control to serve that one undo is exactly what this rule refuses.
+- Relations to tasks that already exist in the sink remain out of scope; the rule makes that boundary principled rather than incidental.
+- Future controls on Review get tested against one question: does this correct something we extracted, or does it create something new?
