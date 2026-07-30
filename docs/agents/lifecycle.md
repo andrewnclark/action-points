@@ -1,66 +1,51 @@
-# Ticket agent lifecycle
+# Ticket agent lifecycle — ActionPoints overlay
 
-You are implementing issue #N in complete isolation: your own worktree, your own compose project, your own Postgres. Nothing you do can touch the developer's live stack (their Postgres holds host port 5433, their Phoenix server holds port 4000) or any sibling agent. `N` is the issue number throughout.
+This file is an **overlay**, not a whole lifecycle. The phases, their completion criteria, and
+the obligations that hold regardless of stack come from the `implement-parallel` skill:
+`lifecycle-core.md` for the discipline, `lifecycle-elixir-phoenix.md` for the mix and compose
+commands. Only what is genuinely particular to this repo lives here.
 
-## Setup
+If something below contradicts the core discipline, the core wins and this file is wrong.
 
-```bash
-git -C <repo> fetch origin main
-git -C <repo> worktree add ../wt-N -b N-<slug> origin/main
-cd ../wt-N
-export COMPOSE_PROJECT_NAME=ap-N
-export DB_PORT=$((5500+N))
-docker compose up -d db
-mix deps.get
-```
+## What this repo holds
 
-Wait until `docker inspect -f '{{.State.Health.Status}}' ap-N-db-1` reports `healthy`.
+**Names and ports.** Compose project `ap-N`, worktree `../wt-N`, branch `N-<slug>`, database on
+host port `5500+N`, health-checked as `ap-N-db-1`.
 
-If docker answers `permission denied` on `/var/run/docker.sock` even outside the sandbox, your shell's group list is stale (the session predates the user's docker group membership) — wrap the command in `sg docker -c '…'`.
+**The developer's own stack is live while you work.** Their Postgres holds host port `5433` and
+their Phoenix server holds `4000`. Neither is yours, and the `5500+N` scheme exists to keep out
+of their way.
 
-No `.env` is needed and no asset build is needed: the test suite swaps every external port (extractor, task sink, payments) for fakes in `test/support/`, and Phoenix tests render without built assets — do not waste time on `mix assets.build` or npm.
+**No `.env`, and no asset build.** The suite substitutes fakes in `test/support/` for every
+external port — Extractor, Task Sink, payments — so no API keys are needed, and Phoenix tests
+render without built assets. Do not spend time on `mix assets.build` or npm; nothing in the
+suite needs them.
 
-Completion: healthy Postgres on your own host port, `deps/` fetched, both env vars exported in the shell that will run tests.
+(For running the app by hand, `.claude/launch.json` sources `.env` — without it every Extraction
+fails `missing_api_key`. That is for the developer, not for agents.)
 
-## Implement
+**The test database bootstraps itself.** `config/test.exs` reads `DB_PORT` (default `5433`), and
+the `mix test` alias creates and migrates `action_points_test` inside your own container on
+first run. There is no shared database to trample.
 
-Follow `/implement` for issue #N: `/tdd` at pre-agreed seams, CONTEXT.md vocabulary, ADRs in `docs/adr/` respected.
+**Migration versions are guarded, not coordinated.** Generate migrations normally with
+`mix ecto.gen.migration`. Sibling agents occasionally produce the same timestamp;
+`migration_versions_test.exs` fails the suite loudly when the branches meet, and whoever merges
+second renumbers one file. Validation over convention-bending.
 
-Run any review pass through **synchronous (foreground) sub-agents** — the fresh context window is the point of a sub-agent reviewer, so keep it, but the spawn must block until the report returns. Never spawn reviewers in the background and stop to wait: their completion signals route to the orchestrator, not to you, and a turn ended "waiting" is a stall.
+**Credo is calibrated, not stock.** `.credo.exs` sets `CyclomaticComplexity` to 11 and `Nesting`
+to 3 — the codebase's current worst cases, so the check means "do not get worse". A finding means
+your change introduced it: fix the change. If a threshold genuinely needs to move, argue for it
+in the PR body.
 
-Tests run on the host against your own forwarded port — `config/test.exs` reads `DB_PORT` (default 5433), and the `mix test` alias creates and migrates `action_points_test` in your container on first run; there is no shared database to trample.
+## Domain obligations
 
-```bash
-DB_PORT=$((5500+N)) mix test test/action_points/...   # single files while working
-DB_PORT=$((5500+N)) mix test                          # full suite once at the end
-```
+Follow `/implement` for the issue: `/tdd` at pre-agreed seams, **CONTEXT.md vocabulary**, and the
+ADRs in `docs/adr/` respected. CONTEXT.md is the authority on domain terms — a name that
+contradicts it is a bug, and a term the code needs but CONTEXT.md lacks is worth raising rather
+than inventing.
 
-(The Setup exports already cover this if you stay in one shell — restate them in any new one.)
+## Completion
 
-Generate migrations the normal way (`mix ecto.gen.migration`) — do not hand-craft version numbers. Sibling agents occasionally generate the same timestamp; `migration_versions_test.exs` fails the suite loudly when the branches meet, and whoever merges second renumbers one file then. Validation over convention-bending.
-
-Never run mix tasks in the developer's main checkout — the `_build` lock wedges their running dev server. Your worktree has its own `_build`; everything happens there, and the first compile is cold.
-
-Completion: full suite green.
-
-## Deliver
-
-One task, one commit, no attribution. The PR body is the durable record — a later reviewer or reconciler reads it when your context is gone, so `Closes #N` alone is not enough. After that line, cover: what was built against each part of the spec; every judgement call or deviation and its reasoning; any pattern you established that a sibling ticket might also touch; anything deliberately deferred and why. Then push the branch and open the PR:
-
-```bash
-git push -u origin N-<slug>
-gh pr create --base main --title "<issue title>" --body "<Closes #N + the record above>"
-```
-
-## Teardown
-
-On success, always (with `COMPOSE_PROJECT_NAME` still exported, from the worktree):
-
-```bash
-docker compose down -v
-cd <repo> && git worktree remove ../wt-N
-```
-
-On failure (suite not green, blocked mid-issue): **park** — leave the worktree and stack running, push nothing, and report exactly what blocked you.
-
-Completion: either a PR exists and the environment is gone, or a parked report exists and the environment is intact.
+`mix precommit` green — `compile --warning-as-errors`, `deps.unlock --unused`, `format`, `credo`,
+`test` — not `mix test` alone.

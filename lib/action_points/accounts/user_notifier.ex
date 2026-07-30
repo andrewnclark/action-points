@@ -1,4 +1,10 @@
 defmodule ActionPoints.Accounts.UserNotifier do
+  @moduledoc """
+  The account emails: magic-link log-in, email-change confirmation, and the
+  rest of the `phx.gen.auth` set. Composition only — delivery is the Mailer's
+  job, and which adapter that uses is decided in config.
+  """
+
   import Swoosh.Email
 
   alias ActionPoints.Mailer
