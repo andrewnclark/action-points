@@ -101,6 +101,23 @@ defmodule ActionPoints.Sinks.ResolveAssigneesTest do
     assert resolved_bob.assignee_sink_user_id == "u-1"
   end
 
+  # The fold applies to both sides of the comparison, not just the guess: a
+  # Task Sink member's own name goes through AssigneeMapping.normalize/1 too,
+  # so growing the fold can never leave the two sides disagreeing.
+  test "a Task Sink member's own name is folded by the same helper", %{scope: scope} do
+    Application.put_env(:action_points, :fake_task_sink,
+      users: {:ok, [%{id: "u-1", name: "  Bob SMITH  ", handle: "bsmith"}]}
+    )
+
+    [action_point] = action_points([%{title: "Ship it", assignee_guess: "Bob Smith"}])
+
+    {:ok, _users} = Sinks.resolve_assignees(scope, [action_point])
+
+    resolved = Meetings.get_action_point!(action_point.id, @session_token)
+    assert resolved.assignee_resolution == :suggested
+    assert resolved.assignee_sink_user_id == "u-1"
+  end
+
   test "an ambiguous first name resolves as unassigned, never guessed", %{scope: scope} do
     Application.put_env(:action_points, :fake_task_sink,
       users:

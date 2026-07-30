@@ -348,13 +348,13 @@ defmodule ActionPoints.Sinks do
   # failing that, exactly one first-name match wins; anything else is left
   # for the user to pick.
   defp match_by_name(guess, users) do
-    guess = guess |> String.trim() |> String.downcase()
+    guess = AssigneeMapping.normalize(guess)
 
-    full_name_matches = Enum.filter(users, &(String.downcase(&1.name) == guess))
+    full_name_matches = Enum.filter(users, &(AssigneeMapping.normalize(&1.name) == guess))
 
     first_name_matches =
       Enum.filter(users, fn user ->
-        user.name |> String.downcase() |> String.split() |> List.first() == guess
+        user.name |> AssigneeMapping.normalize() |> String.split() |> List.first() == guess
       end)
 
     case {full_name_matches, first_name_matches} do
