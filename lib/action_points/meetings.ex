@@ -13,6 +13,7 @@ defmodule ActionPoints.Meetings do
   alias ActionPoints.Accounts.User
   alias ActionPoints.Billing
   alias ActionPoints.Meetings.ActionPoint
+  alias ActionPoints.Meetings.Blocker
   alias ActionPoints.Meetings.Extraction
   alias ActionPoints.Meetings.GroundingQuote
   alias ActionPoints.Meetings.Transcript
@@ -167,7 +168,7 @@ defmodule ActionPoints.Meetings do
   def get_extraction!(id, session_token) when is_binary(session_token) do
     Extraction
     |> Repo.get_by!(id: id, session_token: session_token)
-    |> Repo.preload(:action_points)
+    |> Repo.preload(action_points: [blockers: :blocked_by])
   end
 
   @doc """
@@ -269,16 +270,23 @@ defmodule ActionPoints.Meetings do
   defp finalize_success(extraction, %{action_points: action_points} = result) do
     {:ok, extraction} =
       Repo.transaction(fn ->
-        # Idempotence: a re-run replaces, never appends
+        # Idempotence: a re-run replaces, never appends. Blockers ride along —
+        # they cascade-delete with the Action Points they relate.
         Repo.delete_all(from ap in ActionPoint, where: ap.extraction_id == ^extraction.id)
 
-        action_points
-        |> Enum.with_index(1)
-        |> Enum.each(fn {attrs, position} ->
-          %ActionPoint{extraction_id: extraction.id, position: position}
-          |> ActionPoint.changeset(verify_quotes(attrs, extraction))
-          |> Repo.insert!()
-        end)
+        ids_by_position =
+          action_points
+          |> Enum.with_index(1)
+          |> Map.new(fn {attrs, position} ->
+            inserted =
+              %ActionPoint{extraction_id: extraction.id, position: position}
+              |> ActionPoint.changeset(verify_quotes(attrs, extraction))
+              |> Repo.insert!()
+
+            {position, inserted.id}
+          end)
+
+        persist_blockers(action_points, ids_by_position)
 
         # The Credit is consumed atomically with success — a crash here can't
         # charge without delivering. Anonymous Extractions have no one to
@@ -315,6 +323,22 @@ defmodule ActionPoints.Meetings do
     Map.put(attrs, :quotes, quotes)
   end
 
+  # The Extraction's proposed Blockers, persisted as rows between the Action
+  # Points just inserted. `Blocker.sanitise/1` has already made every surviving
+  # edge insertable — nonsense proposals are dropped, never a failed Extraction.
+  defp persist_blockers(action_points, ids_by_position) do
+    action_points
+    |> Enum.with_index(1)
+    |> Enum.map(fn {attrs, position} -> {position, Map.get(attrs, :blocked_by, [])} end)
+    |> Blocker.sanitise()
+    |> Enum.each(fn {blocked, blocking} ->
+      Repo.insert!(%Blocker{
+        action_point_id: ids_by_position[blocked],
+        blocked_by_id: ids_by_position[blocking]
+      })
+    end)
+  end
+
   defp finalize_failure(extraction, reason) do
     extraction =
       update_extraction!(extraction, %{status: :failed, failure_reason: to_string(reason)})
@@ -340,19 +364,35 @@ defmodule ActionPoints.Meetings do
     Repo.one!(
       from ap in ActionPoint,
         join: e in assoc(ap, :extraction),
-        where: ap.id == ^id and e.session_token == ^session_token
+        where: ap.id == ^id and e.session_token == ^session_token,
+        preload: [blockers: :blocked_by]
     )
   end
 
   @doc """
   Marks an Action Point accepted or rejected. Rejection is reversible — the
-  row keeps everything except its standing in the Review.
+  row keeps everything except its standing in the Review — with one exception:
+  its Blockers (in both directions) are removed outright, so no pushed issue
+  can ever point at something that was never created. Accepting again does not
+  resurrect them.
   """
   def set_action_point_status(%ActionPoint{} = action_point, status)
       when status in [:accepted, :rejected] do
+    {:ok, action_point} =
+      Repo.transaction(fn ->
+        if status == :rejected do
+          Repo.delete_all(
+            from b in Blocker,
+              where: b.action_point_id == ^action_point.id or b.blocked_by_id == ^action_point.id
+          )
+        end
+
+        action_point
+        |> Ecto.Changeset.change(status: status)
+        |> Repo.update!()
+      end)
+
     action_point
-    |> Ecto.Changeset.change(status: status)
-    |> Repo.update!()
   end
 
   @doc """
@@ -418,6 +458,79 @@ defmodule ActionPoints.Meetings do
     resolve_action_point_assignee(action_point, :manual, sink_user)
   end
 
+  ## Blocker curation
+
+  @doc """
+  Fetches a Blocker only if its blocked Action Point's Extraction belongs to
+  the given session token. Raises `Ecto.NoResultsError` otherwise, so a
+  visitor can never curate another session's Review.
+  """
+  def get_blocker!(id, session_token) when is_binary(session_token) do
+    Repo.one!(
+      from b in Blocker,
+        join: ap in assoc(b, :action_point),
+        join: e in assoc(ap, :extraction),
+        where: b.id == ^id and e.session_token == ^session_token
+    )
+  end
+
+  @doc """
+  Links two of an Extraction's Action Points during Review: `blocked` gains a
+  blocked-by relation on `blocked_by`. The same nonsense the Extraction's
+  hygiene drops is refused here — a self-reference, a duplicate edge, an edge
+  closing a cycle — plus the two shapes only Review can attempt: a relation
+  across Extractions (the product never links into an existing backlog) and a
+  relation touching a rejected Action Point (its issue will never exist).
+  """
+  def add_action_point_blocker(%ActionPoint{} = blocked, %ActionPoint{} = blocked_by) do
+    cond do
+      blocked.id == blocked_by.id ->
+        {:error, :self_reference}
+
+      blocked.extraction_id != blocked_by.extraction_id ->
+        {:error, :cross_extraction}
+
+      rejected_end?(blocked, blocked_by) ->
+        {:error, :rejected}
+
+      Repo.get_by(Blocker, action_point_id: blocked.id, blocked_by_id: blocked_by.id) ->
+        {:error, :duplicate}
+
+      Blocker.creates_cycle?(extraction_edges(blocked.extraction_id), {blocked.id, blocked_by.id}) ->
+        {:error, :cycle}
+
+      true ->
+        {:ok, Repo.insert!(%Blocker{action_point_id: blocked.id, blocked_by_id: blocked_by.id})}
+    end
+  end
+
+  # Checked against the database, not the passed structs — a Review screen can
+  # hold a card whose sibling was rejected since it last rendered.
+  defp rejected_end?(blocked, blocked_by) do
+    Repo.exists?(
+      from ap in ActionPoint,
+        where: ap.id in ^[blocked.id, blocked_by.id] and ap.status == :rejected
+    )
+  end
+
+  defp extraction_edges(extraction_id) do
+    Repo.all(
+      from b in Blocker,
+        join: ap in assoc(b, :action_point),
+        where: ap.extraction_id == ^extraction_id,
+        select: {b.action_point_id, b.blocked_by_id}
+    )
+  end
+
+  @doc """
+  Removes one Blocker during Review — one click, and a wrong guess costs
+  nothing.
+  """
+  def remove_action_point_blocker(%Blocker{} = blocker) do
+    Repo.delete!(blocker)
+    :ok
+  end
+
   @doc """
   Counts the Action Points a Push would create right now — accepted in the
   Review and not yet pushed. This is the number the Push button promises.
@@ -471,6 +584,36 @@ defmodule ActionPoints.Meetings do
       sink_issue_identifier: identifier,
       sink_issue_url: url
     )
+    |> Repo.update!()
+  end
+
+  @doc """
+  Lists the Blockers a Push still has to realise in the Task Sink: not yet
+  created there, and with both ends already existing as sink issues. A retry
+  after a partial Push therefore picks up exactly the missing edges — never a
+  duplicate. Both Action Points come preloaded, carrying the sink issue ids
+  the relation is created between.
+  """
+  def list_pushable_blockers(extraction_id) do
+    Repo.all(
+      from b in Blocker,
+        join: blocked in assoc(b, :action_point),
+        join: blocking in assoc(b, :blocked_by),
+        where: blocked.extraction_id == ^extraction_id,
+        where: is_nil(b.sink_relation_id),
+        where: not is_nil(blocked.sink_issue_id) and not is_nil(blocking.sink_issue_id),
+        order_by: [asc: b.id],
+        preload: [action_point: blocked, blocked_by: blocking]
+    )
+  end
+
+  @doc """
+  Records the created-relation reference on a pushed Blocker — the moment the
+  ordering the meeting stated becomes real in the Task Sink.
+  """
+  def record_relation_push!(%Blocker{} = blocker, %{id: id}) do
+    blocker
+    |> Ecto.Changeset.change(sink_relation_id: id)
     |> Repo.update!()
   end
 

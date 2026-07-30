@@ -15,8 +15,9 @@ defmodule ActionPoints.Sinks.FakeTaskSink do
         push: [:ok, {:error, :unavailable}]
       )
 
-  Pushed tasks accumulate in the `:fake_task_sink_pushes` env so tests can
-  assert what the sink was asked to create.
+  Pushed tasks accumulate in the `:fake_task_sink_pushes` env and created
+  relations in `:fake_task_sink_relations`, so tests can assert what the sink
+  was asked to create.
   """
 
   @behaviour ActionPoints.Sinks.TaskSink
@@ -53,6 +54,25 @@ defmodule ActionPoints.Sinks.FakeTaskSink do
            identifier: "ENG-#{number}",
            url: "https://linear.app/fake/issue/ENG-#{number}"
          }}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @impl true
+  def create_relation(_credentials, relation) do
+    case scripted(:relation, :ok) do
+      :ok ->
+        relations = Application.get_env(:action_points, :fake_task_sink_relations, [])
+
+        Application.put_env(
+          :action_points,
+          :fake_task_sink_relations,
+          relations ++ [relation]
+        )
+
+        {:ok, %{id: "relation-#{length(relations) + 1}"}}
 
       {:error, reason} ->
         {:error, reason}

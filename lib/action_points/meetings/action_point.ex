@@ -38,6 +38,10 @@ defmodule ActionPoints.Meetings.ActionPoint do
 
     belongs_to :extraction, ActionPoints.Meetings.Extraction
 
+    # Blockers: the blocked-by relations this Action Point waits on, each
+    # pointing at a sibling of the same Extraction and only ever a sibling.
+    has_many :blockers, ActionPoints.Meetings.Blocker, preload_order: [asc: :id]
+
     timestamps(type: :utc_datetime)
   end
 

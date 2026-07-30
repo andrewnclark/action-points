@@ -27,6 +27,15 @@ defmodule ActionPoints.Sinks do
   def task_sink, do: Application.fetch_env!(:action_points, :task_sink)
 
   @doc """
+  Whether the sink declares the optional relation capability — exporting
+  `create_relation/2`. Push drops a Review's Blockers when it doesn't, and
+  Review says so out loud rather than letting the Push silently lose them.
+  """
+  def supports_relations?(sink \\ task_sink()) do
+    Code.ensure_loaded?(sink) and function_exported?(sink, :create_relation, 2)
+  end
+
+  @doc """
   Returns the scoped user's sink connection, or nil when not connected.
 
   The decrypted API key is deliberately blanked — display needs only the
@@ -70,15 +79,27 @@ defmodule ActionPoints.Sinks do
   lands. Only unpushed Action Points are attempted, so calling again after a
   partial failure creates exactly the missing ones.
 
+  Issues come first, then the Review's Blockers as real blocked-by relations
+  — so a relation failure leaves every issue intact, and a retry creates only
+  what is missing, per edge, exactly like the issues themselves. A sink that
+  doesn't declare the relation capability (`supports_relations?/1`) gets the
+  issues and drops the relations.
+
   Returns:
 
-    * `{:ok, pushed}` — every pushable Action Point was created
+    * `{:ok, pushed}` — every pushable Action Point was created and every
+      pushable relation too (`pushed` lists only the issues created this
+      call, so a retry that only completed relations returns `{:ok, []}`)
     * `{:error, :not_connected}` — the user has no sink connection
     * `{:error, :push_in_progress}` — another Push of this Extraction is
       already running (a second click or second tab must never double-create)
     * `{:error, {reason, pushed, remaining}}` — the Push stopped at a sink
-      failure: `pushed` were created this call, `remaining` counts the
-      Action Points not created
+      failure while creating issues: `pushed` were created this call,
+      `remaining` counts the Action Points not created; no relations were
+      attempted
+    * `{:error, {:relations, reason, created, remaining}}` — every issue
+      exists, but the Push stopped partway through the relations: `created`
+      were created this call, `remaining` counts the edges not created
 
   A Push never touches the Credit ledger — the Credit belongs to the
   successful Extraction.
@@ -106,9 +127,44 @@ defmodule ActionPoints.Sinks do
   end
 
   defp do_push(connection, extraction) do
-    extraction.id
-    |> Meetings.list_pushable_action_points()
-    |> push_each(connection, [])
+    case extraction.id |> Meetings.list_pushable_action_points() |> push_each(connection, []) do
+      {:ok, pushed} -> push_relations(connection, extraction, pushed)
+      {:error, _issue_failure} = error -> error
+    end
+  end
+
+  # Every issue exists by now, so each pushable Blocker has both its sink
+  # issue ids. A sink without the relation capability drops them here —
+  # Review already said so visibly, and the issues still land.
+  defp push_relations(connection, extraction, pushed) do
+    if supports_relations?() do
+      case extraction.id
+           |> Meetings.list_pushable_blockers()
+           |> push_each_relation(connection, 0) do
+        :ok -> {:ok, pushed}
+        {:error, relation_failure} -> {:error, relation_failure}
+      end
+    else
+      {:ok, pushed}
+    end
+  end
+
+  defp push_each_relation([], _connection, _created), do: :ok
+
+  defp push_each_relation([blocker | rest], connection, created) do
+    relation = %{
+      blocked_issue_id: blocker.action_point.sink_issue_id,
+      blocking_issue_id: blocker.blocked_by.sink_issue_id
+    }
+
+    case task_sink().create_relation(%{api_key: connection.api_key}, relation) do
+      {:ok, created_relation} ->
+        Meetings.record_relation_push!(blocker, created_relation)
+        push_each_relation(rest, connection, created + 1)
+
+      {:error, reason} ->
+        {:error, {:relations, reason, created, length(rest) + 1}}
+    end
   end
 
   defp push_each([], _connection, pushed), do: {:ok, Enum.reverse(pushed)}

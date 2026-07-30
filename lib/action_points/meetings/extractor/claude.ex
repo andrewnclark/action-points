@@ -31,6 +31,12 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
     against it and a paraphrase, trimmed filler, or corrected typo is
     silently discarded. Prefer one or two quotes that carry a decision,
     constraint, or commitment over three weak ones; an empty list is fine.
+  - blocked_by: the positions (1-based, in this same action_points list) of
+    the other action points this one must wait for, but only when the
+    transcript states the dependency — "Bob can't deploy until Alice
+    finishes the migration", "once that's done", "after the review lands".
+    Tasks that merely share a topic, a person, or a deadline are not
+    dependencies. Most action points have none: an empty list is the norm.
 
   Alongside the Action Points, report meeting_date: the date this meeting
   itself took place, as an ISO 8601 date, but only when the transcript states
@@ -67,9 +73,20 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
             # 'array' type, property 'maxItems' is not supported"), failing the
             # whole request. The cap is the prompt's to ask for and
             # `GroundingQuote.verify/2`'s to enforce.
-            "quotes" => %{"type" => "array", "items" => %{"type" => "string"}}
+            "quotes" => %{"type" => "array", "items" => %{"type" => "string"}},
+            # Sibling positions this Action Point waits on. Anything the
+            # schema can't say — position bounds, no self-references, no
+            # cycles — is `Blocker.sanitise/1`'s to enforce at finalise.
+            "blocked_by" => %{"type" => "array", "items" => %{"type" => "integer"}}
           },
-          "required" => ["title", "description", "assignee_guess", "due_date", "quotes"],
+          "required" => [
+            "title",
+            "description",
+            "assignee_guess",
+            "due_date",
+            "quotes",
+            "blocked_by"
+          ],
           "additionalProperties" => false
         }
       }
@@ -136,7 +153,8 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
       description: action_point["description"],
       assignee_guess: action_point["assignee_guess"],
       due_date: parse_date(action_point["due_date"]),
-      quotes: action_point["quotes"] || []
+      quotes: action_point["quotes"] || [],
+      blocked_by: action_point["blocked_by"] || []
     }
   end
 

@@ -139,6 +139,23 @@ defmodule ActionPointsWeb.ReviewLive do
               </p>
             </div>
 
+            <%!-- A sink without the relation capability gets flat tasks: the
+            drop is said here, before Push, never discovered after it. --%>
+            <div
+              :if={
+                @has_blockers and (@sink_live? or @assignee_degraded?) and not @relations_supported?
+              }
+              id="relations-unsupported-notice"
+              class="mb-4 flex gap-3 rounded-box border border-warning/40 bg-warning/10 p-4"
+              role="alert"
+            >
+              <.icon name="hero-exclamation-triangle" class="size-5 shrink-0 text-warning" />
+              <p class="text-base-content/70">
+                Your Task Sink doesn't support blocked-by relations, so the relations below stay
+                here — Pushing creates the tasks without them.
+              </p>
+            </div>
+
             <div
               :if={@push_failure}
               id="push-failure"
@@ -149,27 +166,39 @@ defmodule ActionPointsWeb.ReviewLive do
               <div>
                 <%!-- A Push that never created anything did not stop partway,
                 and saying it did sends the reader to Linear looking for a task
-                that was never made. Only a split is reported as a split. --%>
+                that was never made. Only a split is reported as a split — and
+                a relation split is reported as exactly that: every task
+                exists, only the ordering between them is missing. --%>
                 <p class="font-semibold">
-                  <%= if @push_failure.created == 0 do %>
-                    The Push didn't go through: nothing was created.
-                  <% else %>
-                    The Push stopped partway: {@push_failure.created} created, {@push_failure.remaining} not created.
+                  <%= cond do %>
+                    <% @push_failure.phase == :relations -> %>
+                      Every task was created, but the Push stopped partway through the
+                      blocked-by relations: {@push_failure.created} created, {@push_failure.remaining} not created.
+                    <% @push_failure.created == 0 -> %>
+                      The Push didn't go through: nothing was created.
+                    <% true -> %>
+                      The Push stopped partway: {@push_failure.created} created, {@push_failure.remaining} not created.
                   <% end %>
                 </p>
                 <p class="mt-1 text-base-content/70">
                   {push_failure_reason(@push_failure.reason)}
-                  <%= if @push_failure.created == 0 do %>
-                    Pushing again starts from scratch — nothing is there to duplicate.
-                  <% else %>
-                    Pushing again creates only the missing ones — never a duplicate.
+                  <%= cond do %>
+                    <% @push_failure.phase == :relations -> %>
+                      Pushing again creates only the missing relations — never a duplicate.
+                    <% @push_failure.created == 0 -> %>
+                      Pushing again starts from scratch — nothing is there to duplicate.
+                    <% true -> %>
+                      Pushing again creates only the missing ones — never a duplicate.
                   <% end %>
                 </p>
               </div>
             </div>
 
             <div
-              :if={@pushed_action_points != [] and @pushable_count == 0 and not @pushing?}
+              :if={
+                @pushed_action_points != [] and @pushable_count == 0 and
+                  @unpushed_relations_count == 0 and not @pushing?
+              }
               id="push-confirmation"
               class="mb-4 flex gap-3 rounded-box border border-success/40 bg-success/10 p-4"
             >
@@ -379,30 +408,103 @@ defmodule ActionPointsWeb.ReviewLive do
                     >
                       No due date
                     </.chip>
+                    <%!-- Blockers: the ordering the meeting stated, editable
+                    until this Action Point is real in the Task Sink. A wrong
+                    guess costs one click. --%>
+                    <span
+                      :for={blocker <- action_point.blockers}
+                      data-role="blocker"
+                      class="inline-flex items-center gap-1 rounded-field border border-base-300 px-2 py-0.5 text-xs text-base-content/70"
+                    >
+                      <.icon name="hero-hand-raised-micro" class="size-3 text-base-content/65" />
+                      Blocked by:
+                      <span class="max-w-[14rem] truncate font-medium">
+                        {blocker.blocked_by.title}
+                      </span>
+                      <%!-- Removable until the relation itself is real in the
+                      sink — even when this Action Point's issue already is,
+                      or a relation the sink keeps refusing could never be
+                      taken back. --%>
+                      <button
+                        :if={is_nil(blocker.sink_relation_id)}
+                        id={"#{dom_id}-blocker-#{blocker.id}-remove"}
+                        phx-click="remove_blocker"
+                        phx-value-id={blocker.id}
+                        class="-mr-0.5 grid place-items-center rounded-[3px] p-0.5 hover:bg-base-300"
+                        title="Remove this relation"
+                        aria-label="Remove this relation"
+                      >
+                        <.icon name="hero-x-mark-micro" class="size-3" />
+                      </button>
+                    </span>
+                    <%!-- phx-value-id lives on the form, not the select — same
+                    LiveView constraint as the assignee picker above. --%>
+                    <%!-- A pushed Action Point can still gain a relation: both
+                    issues exist in the sink, so the next Push creates just the
+                    edge (the push bar stays alive for exactly that). --%>
+                    <form
+                      :if={
+                        action_point.status == :accepted and
+                          blocker_candidates(action_point, @blocker_options) != []
+                      }
+                      id={"action-point-#{action_point.id}-blocker-form"}
+                      phx-change="add_blocker"
+                      phx-value-id={action_point.id}
+                      class="inline-flex"
+                    >
+                      <select
+                        id={"action-point-#{action_point.id}-blocker-picker"}
+                        name="blocked_by_id"
+                        data-role="blocker-picker"
+                        aria-label="Add a blocked-by relation"
+                        class="select select-xs w-auto max-w-[14rem] border-dashed text-base-content/65"
+                      >
+                        <option value="" selected>+ Blocked by…</option>
+                        <option
+                          :for={option <- blocker_candidates(action_point, @blocker_options)}
+                          value={option.id}
+                        >
+                          {option.title}
+                        </option>
+                      </select>
+                    </form>
                   </div>
                 <% end %>
               </li>
             </ul>
 
             <div
-              :if={@pushable_count > 0 or @pushed_action_points == []}
+              :if={
+                @pushable_count > 0 or @unpushed_relations_count > 0 or
+                  @pushed_action_points == []
+              }
               class="sticky bottom-0 mt-4 flex flex-wrap items-center gap-3 rounded-box border border-base-300 bg-base-200/95 p-3 backdrop-blur"
             >
               <%!-- With nothing accepted the bar has no count worth stating, so
-              it names the way out instead of reading "0 Action Points ready". --%>
+              it names the way out instead of reading "0 Action Points ready".
+              With only relations left (a relation-phase failure), the bar says
+              that — the way back to a complete Push must stay under the hand. --%>
               <p class="text-base-content/70">
-                <%= if @pushable_count > 0 do %>
-                  <span class="font-semibold text-base-content">{@pushable_count}</span>
-                  {ngettext("Action Point ready", "Action Points ready", @pushable_count)} · pushing to Linear
-                <% else %>
-                  Nothing accepted yet. Accept an Action Point to Push it.
+                <%= cond do %>
+                  <% @pushable_count > 0 -> %>
+                    <span class="font-semibold text-base-content">{@pushable_count}</span>
+                    {ngettext("Action Point ready", "Action Points ready", @pushable_count)} · pushing to Linear
+                  <% @unpushed_relations_count > 0 -> %>
+                    <span class="font-semibold text-base-content">{@unpushed_relations_count}</span>
+                    {ngettext(
+                      "blocked-by relation still to create",
+                      "blocked-by relations still to create",
+                      @unpushed_relations_count
+                    )} · pushing to Linear
+                  <% true -> %>
+                    Nothing accepted yet. Accept an Action Point to Push it.
                 <% end %>
               </p>
               <button
                 id="push-button"
                 class="btn btn-primary ml-auto"
                 phx-click="push"
-                disabled={@pushing? or @pushable_count == 0}
+                disabled={@pushing? or (@pushable_count == 0 and @unpushed_relations_count == 0)}
               >
                 <%= cond do %>
                   <% @pushing? -> %>
@@ -416,6 +518,13 @@ defmodule ActionPointsWeb.ReviewLive do
                       "Sign up to Push 1 Action Point",
                       "Sign up to Push %{count} Action Points",
                       @pushable_count
+                    )}
+                  <% @pushable_count == 0 -> %>
+                    <.icon name="hero-paper-airplane" class="size-4" />
+                    {ngettext(
+                      "Push 1 missing relation",
+                      "Push %{count} missing relations",
+                      @unpushed_relations_count
                     )}
                   <% true -> %>
                     <.icon name="hero-paper-airplane" class="size-4" />
@@ -610,11 +719,13 @@ defmodule ActionPointsWeb.ReviewLive do
 
       editing ->
         case Meetings.update_action_point(editing, params) do
-          {:ok, action_point} ->
+          {:ok, _action_point} ->
+            # A retitle changes the "Blocked by" chips and pickers naming this
+            # Action Point on other cards — refresh them all.
             {:noreply,
              socket
              |> assign(:editing, nil)
-             |> refresh_action_point(action_point)}
+             |> refresh_all_action_points()}
 
           {:error, changeset} ->
             # Re-insert the card — stream items only re-render when
@@ -624,6 +735,43 @@ defmodule ActionPointsWeb.ReviewLive do
              |> assign(:edit_form, to_form(changeset))
              |> stream_insert(:action_points, editing)}
         end
+    end
+  end
+
+  def handle_event("remove_blocker", %{"id" => id}, socket) do
+    id
+    |> Meetings.get_blocker!(socket.assigns.extraction.session_token)
+    |> Meetings.remove_action_point_blocker()
+
+    {:noreply, refresh_all_action_points(socket)}
+  end
+
+  def handle_event("add_blocker", %{"blocked_by_id" => ""}, socket) do
+    {:noreply, socket}
+  end
+
+  def handle_event("add_blocker", %{"id" => id, "blocked_by_id" => blocked_by_id}, socket) do
+    session_token = socket.assigns.extraction.session_token
+    blocked = Meetings.get_action_point!(id, session_token)
+    blocked_by = Meetings.get_action_point!(blocked_by_id, session_token)
+
+    case Meetings.add_action_point_blocker(blocked, blocked_by) do
+      {:ok, _blocker} ->
+        {:noreply, refresh_all_action_points(socket)}
+
+      {:error, :cycle} ->
+        {:noreply,
+         socket
+         |> put_flash(
+           :error,
+           "That relation would make these Action Points block each other in a circle."
+         )
+         |> refresh_all_action_points()}
+
+      # The picker never offers these; only a stale screen can attempt them,
+      # and the refresh un-stales it.
+      {:error, _refused} ->
+        {:noreply, refresh_all_action_points(socket)}
     end
   end
 
@@ -687,6 +835,11 @@ defmodule ActionPointsWeb.ReviewLive do
     socket = assign_extraction(socket, refetch_extraction(socket))
 
     case result do
+      # A retry that had only relations left to create pushes no new issue —
+      # "Pushed 0 Action Points" would read as a failure, so say what happened.
+      {:ok, []} ->
+        {:noreply, put_flash(socket, :info, "Push complete — everything is in Linear.")}
+
       {:ok, pushed} ->
         {:noreply,
          put_flash(
@@ -709,9 +862,19 @@ defmodule ActionPointsWeb.ReviewLive do
         {:noreply,
          put_flash(socket, :error, "A Push of this Review is already running — give it a moment.")}
 
+      {:error, {:relations, reason, created, remaining}} ->
+        {:noreply,
+         assign(socket, :push_failure, %{
+           phase: :relations,
+           reason: reason,
+           created: created,
+           remaining: remaining
+         })}
+
       {:error, {reason, pushed, remaining}} ->
         {:noreply,
          assign(socket, :push_failure, %{
+           phase: :issues,
            reason: reason,
            created: length(pushed),
            remaining: remaining
@@ -726,6 +889,7 @@ defmodule ActionPointsWeb.ReviewLive do
 
     {:noreply,
      assign(socket, :push_failure, %{
+       phase: :issues,
        reason: :api_error,
        created: length(socket.assigns.pushed_action_points),
        remaining: socket.assigns.pushable_count
@@ -762,12 +926,13 @@ defmodule ActionPointsWeb.ReviewLive do
   end
 
   defp set_status(socket, id, status) do
-    action_point =
-      id
-      |> Meetings.get_action_point!(socket.assigns.extraction.session_token)
-      |> Meetings.set_action_point_status(status)
+    id
+    |> Meetings.get_action_point!(socket.assigns.extraction.session_token)
+    |> Meetings.set_action_point_status(status)
 
-    refresh_action_point(socket, action_point)
+    # A rejection also removed the Blockers pointing at this Action Point, so
+    # other cards' chips and pickers changed too — refresh them all.
+    refresh_all_action_points(socket)
   end
 
   defp set_assignee(socket, id, sink_user) do
@@ -821,13 +986,29 @@ defmodule ActionPointsWeb.ReviewLive do
     |> assign_extraction(extraction)
   end
 
-  # Patches one card in place and recounts — a full re-stream would wipe
-  # transient UI state on the other cards.
+  # Patches one card in place and recounts — for the curation that only ever
+  # changes its own card (quotes, assignee picks). Anything that can change
+  # other cards' Blocker chips goes through refresh_all_action_points/1.
   defp refresh_action_point(socket, action_point) do
     socket
     |> assign(:pushable_count, Meetings.count_pushable_action_points(action_point.extraction_id))
     |> assign(:rejected_count, Meetings.count_rejected_action_points(action_point.extraction_id))
     |> stream_insert(:action_points, action_point)
+  end
+
+  # Re-renders every card and recounts: a rejection removes Blockers on other
+  # cards, a retitle renames the chips citing it. Cards are re-inserted, not
+  # reset, so transient DOM state (an open quotes disclosure) survives.
+  defp refresh_all_action_points(socket) do
+    action_points = refetch_extraction(socket).action_points
+
+    socket
+    |> assign_action_point_aggregates(action_points)
+    |> then(
+      &Enum.reduce(action_points, &1, fn ap, socket ->
+        stream_insert(socket, :action_points, ap)
+      end)
+    )
   end
 
   defp assign_extraction(socket, extraction) do
@@ -837,13 +1018,50 @@ defmodule ActionPointsWeb.ReviewLive do
     |> assign(:extraction, %{extraction | action_points: []})
     |> assign(:editing, nil)
     |> assign(:edit_form, nil)
+    |> assign(:pushing?, false)
+    |> assign(:push_failure, nil)
+    |> assign(:relations_supported?, Sinks.supports_relations?())
+    |> assign_action_point_aggregates(action_points)
+    |> assign(:pushed_action_points, Enum.filter(action_points, & &1.sink_issue_id))
+    |> stream(:action_points, action_points, reset: true)
+  end
+
+  defp assign_action_point_aggregates(socket, action_points) do
+    socket
     |> assign(:action_point_count, length(action_points))
     |> assign(:pushable_count, Enum.count(action_points, &Meetings.ActionPoint.pushable?/1))
     |> assign(:rejected_count, Enum.count(action_points, &(&1.status == :rejected)))
-    |> assign(:pushed_action_points, Enum.filter(action_points, & &1.sink_issue_id))
-    |> assign(:pushing?, false)
-    |> assign(:push_failure, nil)
-    |> stream(:action_points, action_points, reset: true)
+    |> assign(:has_blockers, Enum.any?(action_points, &(&1.blockers != [])))
+    |> assign(:unpushed_relations_count, unpushed_relations_count(action_points))
+    |> assign(
+      :blocker_options,
+      Enum.map(action_points, &%{id: &1.id, title: &1.title, status: &1.status})
+    )
+  end
+
+  # The relations a Push still owes the sink — what keeps the Push button
+  # alive after a relation-phase failure. Zero for a sink that can't take
+  # them: dropped relations are never "still to create".
+  defp unpushed_relations_count(action_points) do
+    if Sinks.supports_relations?() do
+      action_points
+      |> Enum.filter(&(&1.status == :accepted))
+      |> Enum.flat_map(& &1.blockers)
+      |> Enum.count(&is_nil(&1.sink_relation_id))
+    else
+      0
+    end
+  end
+
+  # The sibling Action Points one card's picker may propose as its blockers:
+  # not itself, not one already blocking it, and never a rejected one — its
+  # task will never exist to point at.
+  defp blocker_candidates(action_point, blocker_options) do
+    existing = MapSet.new(action_point.blockers, & &1.blocked_by_id)
+
+    Enum.reject(blocker_options, fn option ->
+      option.id == action_point.id or option.status == :rejected or option.id in existing
+    end)
   end
 
   defp refetch_extraction(socket) do

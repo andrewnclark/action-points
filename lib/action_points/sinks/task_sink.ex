@@ -31,6 +31,15 @@ defmodule ActionPoints.Sinks.TaskSink do
           required(:url) => String.t()
         }
 
+  # A blocked-by relation between two already-created tasks, by their sink
+  # issue ids: `blocked_issue_id` waits on `blocking_issue_id`.
+  @type relation :: %{
+          required(:blocked_issue_id) => String.t(),
+          required(:blocking_issue_id) => String.t()
+        }
+
+  @type created_relation :: %{required(:id) => String.t()}
+
   @type failure :: :invalid_key | :rate_limited | :unavailable | :api_error
 
   @callback validate_credentials(credentials()) :: :ok | {:error, failure()}
@@ -41,4 +50,13 @@ defmodule ActionPoints.Sinks.TaskSink do
   @callback list_users(credentials()) :: {:ok, [sink_user()]} | {:error, failure()}
   @callback push_task(credentials(), team_id :: String.t(), task()) ::
               {:ok, created_task()} | {:error, failure()}
+
+  # The one optional capability: creating a blocked-by relation between two
+  # already-created tasks. A sink declares support by exporting the callback
+  # (`ActionPoints.Sinks.supports_relations?/1` is the question to ask); Push
+  # drops Blockers for a sink that doesn't, noted visibly at Review.
+  @callback create_relation(credentials(), relation()) ::
+              {:ok, created_relation()} | {:error, failure()}
+
+  @optional_callbacks create_relation: 2
 end

@@ -42,13 +42,15 @@ defmodule ActionPoints.Meetings.Extractor.ClaudeTest do
                     "description" => "Priya will send the Q3 report.",
                     "assignee_guess" => "Priya",
                     "due_date" => "2026-07-31",
-                    "quotes" => ["I'll send the Q3 report by July 31st 2026."]
+                    "quotes" => ["I'll send the Q3 report by July 31st 2026."],
+                    "blocked_by" => []
                   },
                   %{
                     "title" => "Circle back on hiring",
                     "description" => "Vague commitment to revisit hiring.",
                     "assignee_guess" => nil,
-                    "due_date" => nil
+                    "due_date" => nil,
+                    "blocked_by" => [1]
                   }
                 ]
               })
@@ -65,15 +67,45 @@ defmodule ActionPoints.Meetings.Extractor.ClaudeTest do
              description: "Priya will send the Q3 report.",
              assignee_guess: "Priya",
              due_date: ~D[2026-07-31],
-             quotes: ["I'll send the Q3 report by July 31st 2026."]
+             quotes: ["I'll send the Q3 report by July 31st 2026."],
+             blocked_by: []
            }
 
     assert second.assignee_guess == nil
     assert second.due_date == nil
+    assert second.blocked_by == [1]
 
     # The schema demands quotes, but a missing key parses as none — quote
     # trouble must never cost the user their Action Points.
     assert second.quotes == []
+  end
+
+  test "a missing blocked_by key parses as no proposed Blockers" do
+    stub_response(fn conn ->
+      Req.Test.json(conn, %{
+        "stop_reason" => "end_turn",
+        "content" => [
+          %{
+            "type" => "text",
+            "text" =>
+              Jason.encode!(%{
+                "meeting_date" => nil,
+                "action_points" => [
+                  %{
+                    "title" => "Send the Q3 report",
+                    "description" => "Priya will send the Q3 report.",
+                    "assignee_guess" => nil,
+                    "due_date" => nil,
+                    "quotes" => []
+                  }
+                ]
+              })
+          }
+        ]
+      })
+    end)
+
+    assert {:ok, %{action_points: [%{blocked_by: []}]}} = Claude.extract(@transcript)
   end
 
   test "a response stating no meeting date parses as none" do
