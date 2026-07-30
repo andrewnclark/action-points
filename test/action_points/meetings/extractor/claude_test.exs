@@ -48,7 +48,8 @@ defmodule ActionPoints.Meetings.Extractor.ClaudeTest do
                     "title" => "Circle back on hiring",
                     "description" => "Vague commitment to revisit hiring.",
                     "assignee_guess" => nil,
-                    "due_date" => nil
+                    "due_date" => nil,
+                    "parent" => 1
                   }
                 ]
               })
@@ -65,11 +66,16 @@ defmodule ActionPoints.Meetings.Extractor.ClaudeTest do
              description: "Priya will send the Q3 report.",
              assignee_guess: "Priya",
              due_date: ~D[2026-07-31],
-             quotes: ["I'll send the Q3 report by July 31st 2026."]
+             quotes: ["I'll send the Q3 report by July 31st 2026."],
+             # A missing parent key parses as no parent, like quotes below.
+             parent: nil
            }
 
     assert second.assignee_guess == nil
     assert second.due_date == nil
+
+    # A proposed Subtask carries its parent's 1-based position through.
+    assert second.parent == 1
 
     # The schema demands quotes, but a missing key parses as none — quote
     # trouble must never cost the user their Action Points.

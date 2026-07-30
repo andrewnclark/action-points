@@ -16,7 +16,13 @@ defmodule ActionPoints.Meetings.Extractor do
           # Up to three candidate Grounding Quotes — claimed verbatim by the
           # model, verified against the Transcript only when the Extraction
           # finalises.
-          required(:quotes) => [String.t()]
+          required(:quotes) => [String.t()],
+          # A Subtask's parent, as the sibling's 1-based position in this
+          # result — proposed only when the meeting itself broke the
+          # deliverable down aloud. Self, dangling, and deeper-than-one-level
+          # references are mechanically dropped when the Extraction finalises;
+          # hygiene never fails an Extraction.
+          optional(:parent) => pos_integer() | nil
         }
 
   @typedoc """

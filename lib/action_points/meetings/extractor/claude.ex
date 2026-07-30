@@ -31,6 +31,15 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
     against it and a paraphrase, trimmed filler, or corrected typo is
     silently discarded. Prefer one or two quotes that carry a decision,
     constraint, or commitment over three weak ones; an empty list is fine.
+  - parent: null almost always. Set it — to another action point's 1-based
+    position in your own list — only when the meeting itself broke a named
+    deliverable into pieces aloud ("the onboarding revamp: Alice takes the
+    copy, Bob the new flow") and this action point is one of those spoken
+    pieces; then its parent is the deliverable's own action point. Action
+    points that are merely related, on the same topic, or plausibly
+    groupable do NOT have a parent — related topics are not a parent, and
+    when in doubt report null. Never nest deeper than one level: a parent
+    must itself have parent null.
 
   Alongside the Action Points, report meeting_date: the date this meeting
   itself took place, as an ISO 8601 date, but only when the transcript states
@@ -67,9 +76,14 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
             # 'array' type, property 'maxItems' is not supported"), failing the
             # whole request. The cap is the prompt's to ask for and
             # `GroundingQuote.verify/2`'s to enforce.
-            "quotes" => %{"type" => "array", "items" => %{"type" => "string"}}
+            "quotes" => %{"type" => "array", "items" => %{"type" => "string"}},
+            # A Subtask's parent by 1-based position; the finalise-time
+            # hygiene in Meetings enforces the one-level cap and drops
+            # self/dangling references, so a bad value can never fail the
+            # Extraction.
+            "parent" => %{"anyOf" => [%{"type" => "integer"}, %{"type" => "null"}]}
           },
-          "required" => ["title", "description", "assignee_guess", "due_date", "quotes"],
+          "required" => ["title", "description", "assignee_guess", "due_date", "quotes", "parent"],
           "additionalProperties" => false
         }
       }
@@ -136,9 +150,15 @@ defmodule ActionPoints.Meetings.Extractor.Claude do
       description: action_point["description"],
       assignee_guess: action_point["assignee_guess"],
       due_date: parse_date(action_point["due_date"]),
-      quotes: action_point["quotes"] || []
+      quotes: action_point["quotes"] || [],
+      parent: parse_parent(action_point["parent"])
     }
   end
+
+  # Anything but a plausible position reads as no parent — like a malformed
+  # date, a malformed reference must never cost the user their Action Points.
+  defp parse_parent(parent) when is_integer(parent) and parent >= 1, do: parent
+  defp parse_parent(_), do: nil
 
   # Used for both the meeting date and each Action Point's due date. Anything
   # the schema should have prevented — a missing key, a phrase like "last
