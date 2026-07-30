@@ -28,9 +28,9 @@ defmodule ActionPoints.Meetings.Timing do
   shape either side of the classification — an atom-keyed map with a `kind`,
   and values within the range a date can hold — not the vocabulary inside it.
 
-  This module currently resolves `absolute` (complete dates), `weekday`,
-  `relative_day`, `span_end`, and `duration`. Partial absolute dates are a
-  later ticket and resolve to `nil` until theirs lands.
+  Every kind of the classification union resolves here: `absolute` (complete
+  or partial), `weekday`, `relative_day`, `span_end`, and `duration`. Only
+  `vague` — and anything malformed — pins nothing.
   """
 
   @typedoc "A day of the week, as the classification names it."
@@ -40,9 +40,15 @@ defmodule ActionPoints.Meetings.Timing do
   What kind of timing language the model heard. `vague` deliberately has
   nowhere to put a date: the boundary between pinnable and unpinnable language
   is a property of this shape, not a request in prose.
+
+  An `absolute` date may arrive with its year unsaid, or with neither its year
+  nor its month — people rarely say a year aloud and often not a month either.
+  It cannot arrive with a year but no month: a spoken year always follows the
+  month it belongs to, so that shape is malformed rather than partial.
   """
   @type classification ::
-          %{kind: :absolute, year: integer() | nil, month: 1..12, day: 1..31}
+          %{kind: :absolute, year: integer(), month: 1..12, day: 1..31}
+          | %{kind: :absolute, year: nil, month: 1..12 | nil, day: 1..31}
           | %{kind: :weekday, weekday: weekday(), modifier: :this | :next | nil}
           | %{kind: :relative_day, offset: non_neg_integer()}
           | %{kind: :span_end, modifier: :this | :next, unit: :week | :month | :quarter}
@@ -100,19 +106,15 @@ defmodule ActionPoints.Meetings.Timing do
   @spec resolve(%{required(:kind) => atom()} | nil, Date.t()) :: Date.t() | nil
   def resolve(nil, %Date{}), do: nil
 
-  def resolve(%{kind: :absolute, year: year, month: month, day: day}, %Date{})
-      when is_integer(year) and is_integer(month) and is_integer(day) do
-    # A stated impossible date (February 30th) pins nothing — a malformed
-    # classification must never cost the user their Action Point.
-    case Date.new(year, month, day) do
-      {:ok, date} -> date
-      {:error, _} -> nil
-    end
+  # A date is taken at its word — the parts that were said are never second-
+  # guessed, and a completed date is left where it falls, weekend or not. Only
+  # the parts the meeting left out are supplied here, and always forward: a
+  # meeting cannot set a deadline in its own past, so the earliest completion
+  # that is not behind the meeting date is the one it meant.
+  def resolve(%{kind: :absolute, day: day} = classification, %Date{} = meeting_date)
+      when is_integer(day) do
+    complete(Map.get(classification, :year), Map.get(classification, :month), day, meeting_date)
   end
-
-  # A partial date ("March the 3rd", no year) needs year inference — a later
-  # ticket. Until it lands, a partial date pins nothing.
-  def resolve(%{kind: :absolute}, %Date{}), do: nil
 
   # "Next Wednesday": that weekday in the calendar week following the
   # meeting's week, weeks starting Monday. Collapses to the bare form when the
@@ -194,17 +196,57 @@ defmodule ActionPoints.Meetings.Timing do
     shift_months(meeting_date, count)
   end
 
-  # Everything else pins nothing. That covers three different things, all of
-  # which end the same way: `vague`, which pins nothing by definition; a
-  # partial `absolute` date, which pins nothing until its ticket lands the
-  # rules; and anything malformed — an unknown kind, a misspelt weekday, a
-  # `span_end` in a unit this module does not know, a duration counted in a
-  # quantifier outside the lexicon, a negative `relative_day` offset. The
-  # last group is why this clause is a catch-all rather than a list of known
-  # kinds: a malformed classification must never cost the user their Action
-  # Point, so the resolver has to have an answer for a classification nobody
-  # anticipated, not just for the ones it was written against.
+  # Everything else pins nothing. That covers two different things, which end
+  # the same way: `vague`, which pins nothing by definition; and anything
+  # malformed — an unknown kind, a misspelt weekday, an `absolute` date with
+  # no day, a `span_end` in a unit this module does not know, a duration
+  # counted in a quantifier outside the lexicon, a negative `relative_day`
+  # offset. The second group is why this clause is a catch-all rather than a
+  # list of known kinds: a malformed classification must never cost the user
+  # their Action Point, so the resolver has to have an answer for a
+  # classification nobody anticipated, not just for the ones it was written
+  # against.
   def resolve(%{kind: _kind}, %Date{}), do: nil
+
+  # A complete date needs no completing: the meeting said all three parts, so
+  # the meeting date has no say. An impossible one (February 30th) pins
+  # nothing — a malformed classification must never cost the user their
+  # Action Point.
+  defp complete(year, month, day, %Date{}) when is_integer(year) and is_integer(month) do
+    case Date.new(year, month, day) do
+      {:ok, date} -> date
+      {:error, _} -> nil
+    end
+  end
+
+  # "March the 3rd": the meeting's own year if that date is still ahead of it,
+  # otherwise the next. Two years are the whole search, so the 29th of
+  # February said in the run-up to two non-leap years pins nothing rather than
+  # reaching out to a leap year nobody could have meant.
+  defp complete(nil, month, day, %Date{} = meeting_date) when is_integer(month) do
+    Enum.find_value([meeting_date.year, meeting_date.year + 1], fn year ->
+      forward(Date.new(year, month, day), meeting_date)
+    end)
+  end
+
+  # "The 3rd": the first month from the meeting's own that both holds that day
+  # and does not put it in the past. Two months on is the furthest the answer
+  # can lie — the 30th, asked on the 31st of January, is March's, and no gap
+  # in the calendar is longer than February's.
+  defp complete(nil, nil, day, %Date{} = meeting_date) do
+    Enum.find_value(0..2, fn ahead ->
+      month = add_months(meeting_date, ahead)
+      forward(Date.new(month.year, month.month, day), meeting_date)
+    end)
+  end
+
+  # A year without the month it belongs to, or a part of the wrong type: the
+  # meeting date can supply what was left unsaid, but not what came through
+  # malformed.
+  defp complete(_year, _month, _day, %Date{}), do: nil
+
+  defp forward({:ok, %Date{} = date}, %Date{} = meeting_date), do: reject_past(date, meeting_date)
+  defp forward({:error, _reason}, %Date{}), do: nil
 
   # The final calendar day of the month or quarter `ahead` spans on from the
   # meeting's own — `ahead` counting in that same unit. Month arithmetic runs
@@ -243,10 +285,10 @@ defmodule ActionPoints.Meetings.Timing do
 
   defp weekend?(%Date{} = date), do: Date.day_of_week(date) > 5
 
-  # A month or quarter whose working days are already spent — only reachable
-  # from a weekend meeting sitting past its last working day — pins nothing.
-  # There is no working day left in the span the meeting named, and a deadline
-  # before the meeting that set it is worse than no deadline at all.
+  # A date behind the meeting that set it is worse than no date at all, so it
+  # pins nothing. Two callers reach it: a month or quarter whose working days
+  # are already spent (only reachable from a weekend meeting sitting past its
+  # last working day), and a completion candidate that has already gone by.
   defp reject_past(%Date{} = resolved, %Date{} = meeting_date) do
     if Date.compare(resolved, meeting_date) == :lt, do: nil, else: resolved
   end
