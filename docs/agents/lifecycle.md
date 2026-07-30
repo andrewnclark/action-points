@@ -37,6 +37,8 @@ DB_PORT=$((5500+N)) mix test                          # full suite once at the e
 
 (The Setup exports already cover this if you stay in one shell — restate them in any new one.)
 
+If you generate a migration, make its version collision-proof against sibling agents: after `mix ecto.gen.migration`, rename the file so the timestamp's minute-and-second field is your issue number zero-padded (e.g. issue #33 → `...T0033_...` becomes `20260731000033_name.exs`-style: keep the date, set the last four digits to 0033). Two sibling agents defaulting to the same generated minute produced duplicate versions once, and Ecto silently skips the second file — fresh databases then miss a table.
+
 Never run mix tasks in the developer's main checkout — the `_build` lock wedges their running dev server. Your worktree has its own `_build`; everything happens there, and the first compile is cold.
 
 Completion: full suite green.
