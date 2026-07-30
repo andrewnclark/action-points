@@ -20,7 +20,7 @@ defmodule ActionPointsWeb.LandingPageTest do
            title: "Send the launch checklist",
            description: "From the sample meeting.",
            assignee_guess: nil,
-           due_date: nil
+           timing: nil
          }
        ]}
     )
@@ -82,7 +82,7 @@ defmodule ActionPointsWeb.LandingPageTest do
            title: "Send the Q3 report to finance",
            description: "Priya committed to sending it.",
            assignee_guess: "Priya",
-           due_date: nil
+           timing: nil
          }
        ]}
     )

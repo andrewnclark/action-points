@@ -12,7 +12,11 @@ defmodule ActionPoints.Meetings.Extractor do
           required(:title) => String.t(),
           required(:description) => String.t() | nil,
           required(:assignee_guess) => String.t() | nil,
-          required(:due_date) => Date.t() | nil,
+          # What kind of timing language the meeting used about this task's
+          # deadline — never a computed date. The model classifies; the
+          # application resolves the classification against the Meeting Date
+          # (`ActionPoints.Meetings.Timing`).
+          required(:timing) => ActionPoints.Meetings.Timing.classification() | nil,
           # Up to three candidate Grounding Quotes — claimed verbatim by the
           # model, verified against the Transcript only when the Extraction
           # finalises.

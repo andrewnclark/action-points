@@ -42,6 +42,10 @@ _Avoid_: user sync, alias, name matching
 The day the meeting happened, recorded on the Extraction and stated at Review. Every relative deadline ("by Friday") resolves against it. Taken from the best evidence available — a date stated in the Transcript, then an unambiguous date in the uploaded filename — and otherwise assumed to be the visitor's own local date.
 _Avoid_: date, timestamp, upload date (the upload date is only ever the assumed fallback)
 
+**Timing Classification**:
+The Extraction's report of what kind of timing language the meeting used about an Action Point's deadline — a named weekday, a stated date, "tomorrow", "soon" — never a computed date. The model classifies; the application resolves the classification against the Meeting Date into a due date, or into none when the language pins no date ("vague").
+_Avoid_: deadline (the language spoken in the meeting), due date (the resolved result)
+
 **Grounding Quote**:
 A short verbatim excerpt from the Transcript attached to an Action Point as evidence, verified to actually appear in the Transcript. Travels with the Action Point into the Task Sink.
 _Avoid_: citation, snippet, source

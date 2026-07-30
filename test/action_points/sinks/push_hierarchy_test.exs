@@ -126,7 +126,7 @@ defmodule ActionPoints.Sinks.PushHierarchyTest do
         %{
           title: "Rewrite the onboarding copy",
           parent: 1,
-          due_date: ~D[2026-08-14]
+          timing: %{kind: :absolute, year: 2026, month: 8, day: 14}
         }
       ])
 

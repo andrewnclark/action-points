@@ -15,6 +15,7 @@ defmodule ActionPoints.Meetings do
   alias ActionPoints.Meetings.ActionPoint
   alias ActionPoints.Meetings.Extraction
   alias ActionPoints.Meetings.GroundingQuote
+  alias ActionPoints.Meetings.Timing
   alias ActionPoints.Meetings.Transcript
   alias ActionPoints.RateLimiter
   alias ActionPoints.Repo
@@ -267,6 +268,12 @@ defmodule ActionPoints.Meetings do
   end
 
   defp finalize_success(extraction, %{action_points: action_points} = result) do
+    # Every relative deadline resolves against the Meeting Date, and the
+    # strongest anchor arrives with this very result: a date the Transcript
+    # itself states (`stated_meeting_date/1`) beats whatever was settled at
+    # creation.
+    anchor = stated_meeting_date(result)[:meeting_date] || extraction.meeting_date
+
     {:ok, extraction} =
       Repo.transaction(fn ->
         # Idempotence: a re-run replaces, never appends
@@ -277,12 +284,19 @@ defmodule ActionPoints.Meetings do
           |> sanitize_parent_refs()
           |> Enum.with_index(1)
           |> Enum.map(fn {attrs, position} ->
+            parent = attrs.parent
+
+            attrs =
+              attrs
+              |> verify_quotes(extraction)
+              |> resolve_due_date(anchor)
+
             action_point =
               %ActionPoint{extraction_id: extraction.id, position: position}
-              |> ActionPoint.changeset(verify_quotes(attrs, extraction))
+              |> ActionPoint.changeset(attrs)
               |> Repo.insert!()
 
-            {position, action_point, attrs.parent}
+            {position, action_point, parent}
           end)
 
         # Second pass: parent references arrive by position, and a child may
@@ -317,6 +331,15 @@ defmodule ActionPoints.Meetings do
 
     broadcast(extraction)
     extraction
+  end
+
+  # The model classifies, the application resolves: the due date an Action
+  # Point is born with is Timing's calendar arithmetic over the model's
+  # classification, anchored on the Meeting Date. From here on it is an
+  # ordinary due date — edited or cleared at Review, pushed like a
+  # hand-entered one.
+  defp resolve_due_date(attrs, anchor) do
+    Map.put(attrs, :due_date, Timing.resolve(Map.get(attrs, :timing), anchor))
   end
 
   # The last link in the anchor chain, and the strongest: a date the Transcript

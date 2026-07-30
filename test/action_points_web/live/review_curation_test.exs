@@ -17,13 +17,13 @@ defmodule ActionPointsWeb.ReviewCurationTest do
                          title: "Send the Q3 report to finance",
                          description: "Priya committed to sending the Q3 report to finance.",
                          assignee_guess: "Priya",
-                         due_date: ~D[2026-07-31]
+                         timing: %{kind: :absolute, year: 2026, month: 7, day: 31}
                        },
                        %{
                          title: "Book the offsite venue",
                          description: "Tom will book the venue for the offsite.",
                          assignee_guess: "Tom",
-                         due_date: nil
+                         timing: nil
                        }
                      ]}
 

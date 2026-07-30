@@ -58,7 +58,7 @@ defmodule ActionPoints.Meetings.SubtasksTest do
           ap("Rewrite the onboarding copy", %{
             parent: 1,
             assignee_guess: "Alice",
-            due_date: ~D[2026-08-14],
+            timing: %{kind: :absolute, year: 2026, month: 8, day: 14},
             quotes: ["Alice takes the copy, Bob the new flow."]
           })
         ])
