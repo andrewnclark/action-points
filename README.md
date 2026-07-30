@@ -68,7 +68,7 @@ progress to subscribed LiveViews over `Phoenix.PubSub`. The browser follows a jo
 
 ## Tests
 
-347 tests across 33 files — roughly a 1:1 test-to-code ratio.
+539 tests across 45 files — roughly a 1:1 test-to-code ratio.
 
 The ones worth reading:
 
@@ -84,9 +84,31 @@ mix ecto.setup
 mix test
 ```
 
+### The classification evaluation suite
+
+One thing the suite above cannot reach: whether the model tags *"have it ready for review by
+Wednesday"* as a weekday reference rather than as vague, and whether it attaches that to the right
+action point. That's model output, not application logic — and the extraction prompt is exactly the
+thing a refactor can silently regress.
+
+`test/eval` holds thirteen fixture transcripts with known expected classifications, run against the
+real API. It is **excluded from the default run by the `:eval` tag**, so `mix test` — and anything
+automated that calls it — never spends money or fails on an off run from the model. Run it
+deliberately, and **always when the extraction prompt changes**:
+
+```sh
+export ANTHROPIC_API_KEY=...
+mix test --include eval test/eval
+```
+
+Each fixture is sampled three times and has to be right in a majority of them. That's not
+ceremony: at one call per fixture the suite failed somewhere in a clean run about half the time,
+which is how a tripwire trains people to ignore it. A real regression makes a fixture wrong in
+nearly every sample and still fails.
+
 ## Decision log
 
-`docs/adr/` holds seven numbered architecture decision records written during the build, alongside a
+`docs/adr/` holds eight numbered architecture decision records written during the build, alongside a
 product brief and spec in `docs/`. If you want to know *why* something is as it is, start there — the
 ADRs record the alternatives that were rejected, which the code cannot.
 
