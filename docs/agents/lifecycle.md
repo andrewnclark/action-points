@@ -16,6 +16,8 @@ mix deps.get
 
 Wait until `docker inspect -f '{{.State.Health.Status}}' ap-N-db-1` reports `healthy`.
 
+If docker answers `permission denied` on `/var/run/docker.sock` even outside the sandbox, your shell's group list is stale (the session predates the user's docker group membership) — wrap the command in `sg docker -c '…'`.
+
 No `.env` is needed and no asset build is needed: the test suite swaps every external port (extractor, task sink, payments) for fakes in `test/support/`, and Phoenix tests render without built assets — do not waste time on `mix assets.build` or npm.
 
 Completion: healthy Postgres on your own host port, `deps/` fetched, both env vars exported in the shell that will run tests.
@@ -23,6 +25,8 @@ Completion: healthy Postgres on your own host port, `deps/` fetched, both env va
 ## Implement
 
 Follow `/implement` for issue #N: `/tdd` at pre-agreed seams, CONTEXT.md vocabulary, ADRs in `docs/adr/` respected.
+
+Run any review pass through **synchronous (foreground) sub-agents** — the fresh context window is the point of a sub-agent reviewer, so keep it, but the spawn must block until the report returns. Never spawn reviewers in the background and stop to wait: their completion signals route to the orchestrator, not to you, and a turn ended "waiting" is a stall.
 
 Tests run on the host against your own forwarded port — `config/test.exs` reads `DB_PORT` (default 5433), and the `mix test` alias creates and migrates `action_points_test` in your container on first run; there is no shared database to trample.
 
@@ -39,11 +43,11 @@ Completion: full suite green.
 
 ## Deliver
 
-One task, one commit, no attribution. Push the branch and open the PR:
+One task, one commit, no attribution. The PR body is the durable record — a later reviewer or reconciler reads it when your context is gone, so `Closes #N` alone is not enough. After that line, cover: what was built against each part of the spec; every judgement call or deviation and its reasoning; any pattern you established that a sibling ticket might also touch; anything deliberately deferred and why. Then push the branch and open the PR:
 
 ```bash
 git push -u origin N-<slug>
-gh pr create --base main --title "<issue title>" --body "Closes #N"
+gh pr create --base main --title "<issue title>" --body "<Closes #N + the record above>"
 ```
 
 ## Teardown
