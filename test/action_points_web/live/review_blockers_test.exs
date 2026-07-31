@@ -26,7 +26,7 @@ defmodule ActionPointsWeb.ReviewBlockersTest do
 
   # Creates a succeeded Extraction owned by the conn's anonymous session and
   # opens its Review screen (the same pattern as ReviewCurationTest).
-  defp open_review(conn, result \\ @extractor_result) do
+  defp open_review(conn, result \\ @extractor_result, opts \\ []) do
     stub_extractor({:ok, result})
 
     conn = get(conn, ~p"/")
@@ -37,38 +37,61 @@ defmodule ActionPointsWeb.ReviewBlockersTest do
 
     Meetings.run_extraction(extraction)
     extraction = Meetings.get_extraction!(extraction.id, session_token)
+    action_points = extraction.action_points
 
-    # The Review these tests drive is one that has been walked: since ADR-0010
-    # nothing arrives accepted, and this screen is about what follows.
-    action_points = accept_action_points(extraction.action_points)
+    # A Blocker is decided before the Action Point it blocks, so a test about
+    # the blocked one has to walk there — which is the whole point of the
+    # order: by the time it shows, its Blocker line is a decision already made.
+    case Keyword.get(opts, :walk_to) do
+      nil -> :ok
+      index -> walk_to(extraction.id, Enum.at(action_points, index))
+    end
 
     path = ~p"/review/#{extraction}"
     {:ok, review, _html} = live(conn, path)
-    %{review: review, conn: conn, path: path, action_points: action_points}
+
+    %{
+      review: review,
+      conn: conn,
+      path: path,
+      extraction: extraction,
+      action_points: action_points
+    }
   end
 
-  defp dom_id(action_point), do: "action_points-#{action_point.id}"
-  defp chip(action_point), do: "##{dom_id(action_point)} [data-role=blocker]"
+  defp step_id(action_point), do: "step-#{action_point.id}"
+  defp chip(action_point), do: "##{step_id(action_point)} [data-role=blocker]"
 
-  test "a proposed relation renders as a blocked-by chip on the blocked Action Point", %{
-    conn: conn
-  } do
-    %{review: review, action_points: [first, second, third]} = open_review(conn)
+  test "the blocked Action Point states the relation, and the blocker never does", %{conn: conn} do
+    %{review: review, action_points: [first, second, _third]} = open_review(conn)
 
-    assert has_element?(review, chip(second), "Migrate the database")
+    # The walk opens on the Blocker itself, which carries no relation of its own.
+    assert has_element?(review, "##{step_id(first)}")
     refute has_element?(review, chip(first))
-    refute has_element?(review, chip(third))
 
     # The capability note is for connected sinks that lack it — not the Demo.
     refute has_element?(review, "#relations-unsupported-notice")
+
+    review |> element("[data-role=step] [data-role=accept]") |> render_click()
+
+    assert has_element?(review, "##{step_id(second)}")
+    assert has_element?(review, chip(second), "Migrate the database")
+  end
+
+  test "a free-standing Action Point carries no relation", %{conn: conn} do
+    %{review: review, action_points: [_first, _second, third]} =
+      open_review(conn, @extractor_result, walk_to: 2)
+
+    assert has_element?(review, "##{step_id(third)}")
+    refute has_element?(review, chip(third))
   end
 
   test "removing a relation costs one click and survives a reload", %{conn: conn} do
     %{review: review, conn: conn, path: path, action_points: [_first, second, _third]} =
-      open_review(conn)
+      open_review(conn, @extractor_result, walk_to: 1)
 
     [blocker] = second.blockers
-    review |> element("##{dom_id(second)}-blocker-#{blocker.id}-remove") |> render_click()
+    review |> element("#blocker-#{blocker.id}-remove") |> render_click()
 
     refute has_element?(review, chip(second))
 
@@ -78,20 +101,19 @@ defmodule ActionPointsWeb.ReviewBlockersTest do
 
   # ADR-0009: a relation is an edge the meeting either drew or did not. Review
   # can take one away; it cannot put one there.
-  test "no card offers a control for authoring a relation", %{conn: conn} do
-    %{review: review, action_points: action_points} = open_review(conn)
+  test "the step offers no control for authoring a relation", %{conn: conn} do
+    %{review: review, action_points: [first, _second, _third]} = open_review(conn)
 
-    for action_point <- action_points do
-      refute has_element?(review, "#action-point-#{action_point.id}-blocker-form")
-      refute has_element?(review, "##{dom_id(action_point)} [data-role=blocker-picker]")
-    end
+    refute has_element?(review, "#action-point-#{first.id}-blocker-form")
+    refute has_element?(review, "##{step_id(first)} [data-role=blocker-picker]")
   end
 
-  test "rejecting an Action Point removes the chips pointing at it", %{conn: conn} do
-    %{review: review, action_points: [first, second, _third]} = open_review(conn)
+  test "rejecting an Action Point removes the relations pointing at it", %{conn: conn} do
+    %{review: review, action_points: [_first, second, _third]} = open_review(conn)
 
-    review |> element("##{dom_id(first)}-reject") |> render_click()
+    review |> element("[data-role=step] [data-role=reject]") |> render_click()
 
+    assert has_element?(review, "##{step_id(second)}")
     refute has_element?(review, chip(second))
   end
 

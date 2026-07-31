@@ -42,7 +42,7 @@ defmodule ActionPointsWeb.CarryOverTest do
   # Runs the anonymous Demo on the given conn: paste → Review, Extraction
   # succeeded. Returns the conn (carrying the anonymous session cookie),
   # the Review path, and the Extraction id.
-  defp run_anonymous_demo(conn) do
+  defp run_anonymous_demo(conn, decisions \\ [:accept, :accept]) do
     stub_extractor(@extractor_result)
 
     conn = get(conn, ~p"/")
@@ -56,24 +56,21 @@ defmodule ActionPointsWeb.CarryOverTest do
     {:ok, review, _html} = follow_redirect(result, conn)
 
     eventually(fn ->
-      assert has_element?(review, "#action-points li", "Send the Q3 report to finance")
+      assert has_element?(review, "[data-role=step]", "Send the Q3 report to finance")
     end)
 
     {:error, {:live_redirect, %{to: review_path}}} = result
     "/review/" <> extraction_id = review_path
 
     # Since ADR-0010 the Demo's Action Points arrive undecided. What carries
-    # over through signup is a Review somebody decided, so decide it here —
-    # on the screen, so the mounted LiveView stays in step with the rows.
-    for action_point <- demo_action_points(conn, extraction_id) do
-      review |> element("#action_points-#{action_point.id}-accept") |> render_click()
+    # over through signup is a Review somebody walked, so walk it here — on
+    # the screen, one decision per step, so the mounted LiveView stays in step
+    # with the rows.
+    for decision <- decisions do
+      review |> element("[data-role=step] [data-role=#{decision}]") |> render_click()
     end
 
     %{conn: conn, review: review, review_path: review_path, extraction_id: extraction_id}
-  end
-
-  defp demo_action_points(conn, extraction_id) do
-    Meetings.get_extraction!(extraction_id, get_session(conn, :anon_session_token)).action_points
   end
 
   # Registers through the real registration screen on the same conn, then logs
@@ -94,14 +91,10 @@ defmodule ActionPointsWeb.CarryOverTest do
 
   test "anonymous Review survives signup and can then be Pushed without re-running",
        %{conn: conn} do
+    # The second Action Point is rejected on its own step, before signing up —
+    # this Review state must carry over too.
     %{conn: conn, review: review, review_path: review_path, extraction_id: extraction_id} =
-      run_anonymous_demo(conn)
-
-    # Curate before signing up — this Review state must carry over too.
-    [_kept, rejected] =
-      Meetings.get_extraction!(extraction_id, get_session(conn, :anon_session_token)).action_points
-
-    review |> element("#action_points-#{rejected.id}-reject") |> render_click()
+      run_anonymous_demo(conn, [:accept, :reject])
 
     # Anonymous Push is the signup gate.
     review |> element("#push-button") |> render_click()
@@ -162,12 +155,7 @@ defmodule ActionPointsWeb.CarryOverTest do
   end
 
   test "a Review with everything rejected is kept without promising a Push", %{conn: conn} do
-    %{conn: conn, review: review, extraction_id: extraction_id} = run_anonymous_demo(conn)
-
-    for action_point <-
-          Meetings.get_extraction!(extraction_id, get_session(conn, :anon_session_token)).action_points do
-      review |> element("#action_points-#{action_point.id}-reject") |> render_click()
-    end
+    %{conn: conn} = run_anonymous_demo(conn, [:reject, :reject])
 
     {:ok, registration, html} = live(conn, ~p"/users/register")
 
