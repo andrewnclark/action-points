@@ -60,13 +60,17 @@ defmodule ActionPointsWeb.ReviewPastDueTest do
 
     # The past-due flag is a property of an accepted Action Point, and since
     # ADR-0010 nothing arrives accepted — so these tests state the acceptance
-    # they stand on. An undecided Action Point is unflagged for the same reason
-    # a rejected one is: it is not going anywhere.
+    # they stand on, which also walks the Review to its end. An undecided
+    # Action Point is unflagged for the same reason a rejected one is: it is
+    # not going anywhere. `decided: false` is for the tests about the step
+    # itself, where the date is corrected before Accept commits it.
+    action_points = extraction_action_points(extraction, session_token)
+
     [action_point | _] =
       action_points =
-      extraction
-      |> extraction_action_points(session_token)
-      |> accept_action_points()
+      if Keyword.get(opts, :decided, true),
+        do: accept_action_points(action_points),
+        else: action_points
 
     # The connect params must be put on the conn that actually opens the
     # Review: `live/2` with a path recycles the conn, dropping them.
@@ -98,14 +102,18 @@ defmodule ActionPointsWeb.ReviewPastDueTest do
   defp timing_for(%Date{} = date),
     do: %{kind: :absolute, year: date.year, month: date.month, day: date.day}
 
-  defp dom_id(action_point), do: "action_points-#{action_point.id}"
+  # A decided Action Point's row, which is where a flag is readable: the walk
+  # only flags what a Push would act on, and nothing is accepted until it has
+  # been decided.
+  defp row_id(action_point), do: "decided-#{action_point.id}"
+  defp step_id(action_point), do: "step-#{action_point.id}"
 
   defp flagged?(review, action_point) do
-    has_element?(review, "##{dom_id(action_point)} [data-role=due-date][data-past-due]")
+    has_element?(review, "##{row_id(action_point)} [data-role=due-date][data-past-due]")
   end
 
   defp due_date_chip(review, action_point) do
-    review |> element("##{dom_id(action_point)} [data-role=due-date]") |> render()
+    review |> element("##{row_id(action_point)} [data-role=due-date]") |> render()
   end
 
   describe "the flag" do
@@ -152,7 +160,7 @@ defmodule ActionPointsWeb.ReviewPastDueTest do
         open_review(conn, meeting_date: ~D[2026-07-20], local_date: ~D[2026-07-30])
 
       refute flagged?(review, action_point)
-      assert has_element?(review, "##{dom_id(action_point)} [data-role=no-due-date]")
+      assert has_element?(review, "##{row_id(action_point)} [data-role=no-due-date]")
     end
   end
 
@@ -261,65 +269,74 @@ defmodule ActionPointsWeb.ReviewPastDueTest do
         )
 
       assert has_element?(review, "#past-due-notice", "2 accepted Action Points have due dates")
-      assert has_element?(review, "#past-due-notice", "Edit or clear the dates")
+      assert has_element?(review, "#past-due-notice", "Change or clear the dates")
     end
 
+    # Rejecting is a step control, and by the time a flag can appear the step
+    # has been left behind — returning to a decided one is #108's. The rule
+    # under test is the flag's, so the decision is made through the context
+    # and the Review re-read.
     test "goes once the flagged Action Point is rejected, and so does the flag", %{conn: conn} do
-      %{review: review, action_point: action_point} =
+      %{action_point: action_point, session_token: session_token, conn: conn} =
         open_review(conn,
           meeting_date: ~D[2026-07-20],
           due_date: ~D[2026-07-24],
           local_date: ~D[2026-07-30]
         )
 
-      review |> element("##{dom_id(action_point)}-reject") |> render_click()
+      Meetings.set_action_point_status(action_point, :rejected)
+      {:ok, review, _html} = live(conn)
 
       refute has_element?(review, "#past-due-notice")
       # A rejected Action Point creates nothing, so there is nothing to warn
       # about — the date is still shown, just no longer flagged.
       refute flagged?(review, action_point)
       assert due_date_chip(review, action_point) =~ "24 Jul 2026"
+      assert Meetings.get_action_point!(action_point.id, session_token).due_date == ~D[2026-07-24]
     end
   end
 
+  # A date the meeting got wrong is corrected at its own step, before Accept
+  # commits it — which is what deleting Edit had to leave intact.
   describe "the user decides" do
-    test "a flagged due date is still editable, and editing it forward clears the flag",
+    test "a due date is changed from its pill, and the corrected date is unflagged",
          %{conn: conn} do
       %{review: review, action_point: action_point} =
         open_review(conn,
           meeting_date: ~D[2026-07-20],
           due_date: ~D[2026-07-24],
-          local_date: ~D[2026-07-30]
+          local_date: ~D[2026-07-30],
+          decided: false
         )
 
-      assert flagged?(review, action_point)
-
-      review |> element("##{dom_id(action_point)}-edit") |> render_click()
+      assert has_element?(review, "##{step_id(action_point)} [data-role=due-date]", "24 Jul 2026")
 
       review
-      |> form("#edit-#{dom_id(action_point)}", action_point: %{due_date: "2026-08-14"})
-      |> render_submit()
+      |> form("#action-point-#{action_point.id}-due-date-form", %{"due_date" => "2026-08-14"})
+      |> render_change()
+
+      review |> element("[data-role=step] [data-role=accept]") |> render_click()
 
       refute flagged?(review, action_point)
       assert due_date_chip(review, action_point) =~ "14 Aug 2026"
+      refute has_element?(review, "#past-due-notice")
     end
 
-    test "a flagged due date is still clearable", %{conn: conn} do
+    test "a due date is cleared from its pill, with no Edit to do it in",
+         %{conn: conn} do
       %{review: review, action_point: action_point, session_token: session_token} =
         open_review(conn,
           meeting_date: ~D[2026-07-20],
           due_date: ~D[2026-07-24],
-          local_date: ~D[2026-07-30]
+          local_date: ~D[2026-07-30],
+          decided: false
         )
 
-      review |> element("##{dom_id(action_point)}-edit") |> render_click()
-
-      review
-      |> form("#edit-#{dom_id(action_point)}", action_point: %{due_date: ""})
-      |> render_submit()
+      review |> element("#action-point-#{action_point.id}-due-date-clear") |> render_click()
+      review |> element("[data-role=step] [data-role=accept]") |> render_click()
 
       refute flagged?(review, action_point)
-      assert has_element?(review, "##{dom_id(action_point)} [data-role=no-due-date]")
+      assert has_element?(review, "##{row_id(action_point)} [data-role=no-due-date]")
       assert Meetings.get_action_point!(action_point.id, session_token).due_date == nil
     end
   end

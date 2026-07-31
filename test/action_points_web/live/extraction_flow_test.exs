@@ -44,11 +44,13 @@ defmodule ActionPointsWeb.ExtractionFlowTest do
     {:ok, review, _html} = follow_redirect(result, conn)
 
     eventually(fn ->
-      assert has_element?(review, "#action-points li", "Send the Q3 report to finance")
-      assert has_element?(review, "#action-points li", "Priya committed to sending the Q3 report")
-      assert has_element?(review, "#action-points li", "31 Jul 2026")
-      assert has_element?(review, "#action-points li", "Book the offsite venue")
-      assert has_element?(review, "#action-points li", "Tom")
+      # The walk opens on the first Action Point in dependency order — one
+      # screen, both columns, and the payload the Push would send.
+      assert has_element?(review, "[data-role=step]", "Send the Q3 report to finance")
+      assert has_element?(review, "[data-role=payload-description]", "Priya committed to sending")
+      assert has_element?(review, "[data-role=due-date]", "31 Jul 2026")
+      assert has_element?(review, "[data-role=named-person]", "Priya")
+      assert has_element?(review, "#review-toolbar", "2 not yet decided")
     end)
   end
 
@@ -68,7 +70,7 @@ defmodule ActionPointsWeb.ExtractionFlowTest do
     eventually(fn ->
       assert has_element?(review, "#extraction-failed")
       assert has_element?(review, "#retry-extraction")
-      refute has_element?(review, "#action-points")
+      refute has_element?(review, "[data-role=step]")
     end)
 
     # The failure has to say what it cost, which is nothing.
@@ -90,7 +92,7 @@ defmodule ActionPointsWeb.ExtractionFlowTest do
     review |> element("#retry-extraction") |> render_click()
 
     eventually(fn ->
-      assert has_element?(review, "#action-points li", "Send the Q3 report to finance")
+      assert has_element?(review, "[data-role=step]", "Send the Q3 report to finance")
       refute has_element?(review, "#extraction-failed")
     end)
   end
@@ -157,7 +159,7 @@ defmodule ActionPointsWeb.ExtractionFlowTest do
     {:ok, review, _html} = follow_redirect(result, conn)
 
     eventually(fn ->
-      assert has_element?(review, "#action-points li", "Send the Q3 report to finance")
+      assert has_element?(review, "[data-role=step]", "Send the Q3 report to finance")
     end)
 
     # The stored Transcript is the normalised text, not the raw cue file.
