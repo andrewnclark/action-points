@@ -54,7 +54,7 @@ defmodule ActionPointsWeb.CreditGatingTest do
       {:ok, review, _html} = follow_redirect(submit_transcript(home), conn)
 
       eventually(fn ->
-        assert has_element?(review, "#action-points li")
+        assert has_element?(review, "[data-role=step]")
         assert has_element?(review, "#credit-balance", "0 Credits")
       end)
     end

@@ -217,20 +217,81 @@ defmodule ActionPoints.Sinks do
   """
   def hierarchy_supported?, do: task_sink().supports_hierarchy?()
 
-  # The pushed description is the model's prose plus a "From the meeting"
-  # section of the surviving quotes — composed here, at Push, and never
-  # stored, so the format (or the whole feature) can change without a data
-  # migration (issue #24). Each quote is its own blockquote: human speech
-  # visibly set apart from model prose. No quotes, no section.
-  #
-  # The Timing Quote joins the same section rather than earning one of its
-  # own (issue #37): to the reader of the created task it is one more thing
-  # the meeting actually said, and it belongs there whether or not a due date
-  # was resolved from it. It goes last, nearest the task's own due date.
-  defp compose_description(action_point) do
+  @doc """
+  The description a Push sends: the model's prose plus a "From the meeting"
+  section of the surviving quotes — composed here and never stored, so the
+  format (or the whole feature) can change without a data migration (issue
+  #24). Each quote is its own blockquote: human speech visibly set apart from
+  model prose. No quotes, no section.
+
+  The Timing Quote joins the same section rather than earning one of its own
+  (issue #37): to the reader of the created task it is one more thing the
+  meeting actually said, and it belongs there whether or not a due date was
+  resolved from it. It goes last, nearest the task's own due date.
+
+  Public because Review shows what we send (ADR-0010) and the only way to be
+  sure of that is to render this, not a second best guess at it. Composed from
+  `description_parts/1`, so the string Push sends and the thing Review draws
+  cannot drift apart.
+  """
+  def compose_description(action_point) do
+    case description_parts(action_point) do
+      # Prose the model never wrote and no quote to stand in for it: the
+      # pushed task carries no description at all, which is not the same
+      # thing as an empty one.
+      [] -> nil
+      parts -> Enum.map_join(parts, "", & &1.text)
+    end
+  end
+
+  @doc """
+  `compose_description/1` in the pieces Review draws it from, in order.
+
+  Each part is `%{text: binary, quote_index: non_neg_integer | nil}`.
+  Concatenating every `:text` reproduces the pushed description byte for byte
+  — that is the contract, and `compose_description/1` is literally that
+  concatenation.
+
+  `quote_index` is the part's position in the Action Point's `quotes` list
+  when the part is a removable Grounding Quote, and `nil` for everything else
+  (the prose, the section heading, the separators, and the Timing Quote, which
+  is carried on its own column and is not a member of `quotes`). It is what
+  lets Review hang the removal control off the payload itself rather than off
+  a second rendering of the same words.
+  """
+  def description_parts(action_point) do
     %{quotes: quotes, timing_quote: timing_quote, description: description} = action_point
 
-    compose_section(quotes ++ timing_blockquote(quotes, timing_quote), description)
+    case section_quotes(quotes, timing_quote) do
+      [] -> prose_only_parts(description)
+      section -> lead_parts(description) ++ [part("### From the meeting\n\n")] ++ section
+    end
+  end
+
+  defp prose_only_parts(nil), do: []
+  defp prose_only_parts(description), do: [part(description)]
+
+  defp lead_parts(nil), do: []
+  defp lead_parts(""), do: []
+  defp lead_parts(prose), do: [part(prose <> "\n\n")]
+
+  # The blockquotes of the section, each Grounding Quote carrying the index the
+  # removal control needs.
+  #
+  # The blank line between two blockquotes leads the part that follows it
+  # rather than standing as a part of its own, so that every part ends on the
+  # words the control belongs to: a control rendered after a part is rendered
+  # against the quote and not against the whitespace beneath it.
+  defp section_quotes(quotes, timing_quote) do
+    grounding = for {text, index} <- Enum.with_index(quotes), do: {"> " <> text, index}
+    timing = for text <- timing_blockquote(quotes, timing_quote), do: {"> " <> text, nil}
+
+    (grounding ++ timing)
+    |> Enum.with_index()
+    |> Enum.map(fn
+      {{text, quote_index}, 0} -> part(text, quote_index)
+      {{text, quote_index}, _} -> part("\n\n" <> text, quote_index)
+    end)
   end
 
   # A Timing Quote is usually a few words out of the same sentence a Grounding
@@ -243,17 +304,7 @@ defmodule ActionPoints.Sinks do
     if Enum.any?(quotes, &String.contains?(&1, timing_quote)), do: [], else: [timing_quote]
   end
 
-  defp compose_section([], description), do: description
-
-  defp compose_section(quotes, description) do
-    section = "### From the meeting\n\n" <> Enum.map_join(quotes, "\n\n", &("> " <> &1))
-
-    case description do
-      nil -> section
-      "" -> section
-      prose -> prose <> "\n\n" <> section
-    end
-  end
+  defp part(text, quote_index \\ nil), do: %{text: text, quote_index: quote_index}
 
   # The pick Review showed becomes the mapping, born the moment it is first
   # Pushed — a suggestion the user never looked at is saved just the same as

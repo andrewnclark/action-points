@@ -19,8 +19,24 @@ A task candidate produced by an Extraction — title, description, the Named Per
 _Avoid_: task (reserved for what exists in the Task Sink), todo, item, suggestion
 
 **Review**:
-The step where the user curates Action Points — accepting, rejecting, and editing them — before any Push. Nothing reaches a Task Sink without passing Review.
-_Avoid_: preview, confirmation
+The stage where the user decides an Extraction's Action Points before any Push — one per Step, in Dependency Order, with an explicit Accept or Reject on every one, ending on a summary that holds the set and the Push ([ADR-0010](docs/adr/0010-review-is-a-dependency-ordered-walk-not-a-list.md)). Nothing reaches a Task Sink without passing Review, and nothing may be skipped. What Review may change is bounded: it corrects the workspace side of what the Extraction proposed — the Sink Member, the due date, a removed Grounding Quote or Blocker — and never rewrites what the meeting said.
+_Avoid_: preview, confirmation, editing (Review decides and corrects; it is not an editor)
+
+**Step**:
+One screen of a Review: a single Action Point, its title, then what the meeting said on the left and the issue we would create on the right, with the decision beneath. The left column is a record — the Grounding Quotes, the Timing Quote, the Named Person, all verbatim — and nothing in it can be changed; the right column is the issue, and everything the user can change lives there. The quotes appear on both sides deliberately: set opposite each other they double as a check that the quote we send is the quote that was said.
+_Avoid_: card (the card was the list the walk replaced), page, row (a decided Action Point's summary line)
+
+**Undecided**:
+Where every Action Point starts and what it stays until the user Accepts or Rejects it at Review. A status of its own rather than an assumed default, because "accepted" and "not yet looked at" are different facts and only the first is a decision anyone made. Not pushable, so a half-finished Review creates nothing in a colleague's workspace. Review never sends an Action Point back here — a decision is a one-way step out of Undecided, though a rejection can afterwards be turned into an acceptance.
+_Avoid_: pending, unreviewed, default, neutral
+
+**Dependency Order**:
+The order Review walks an Extraction's Action Points in, derived from the relations the Extraction proposed and never stored: every Blocker before the Action Point it blocks, every Subtask before its parent, ties broken on the meeting's own order. One rule in both directions — decide the dependencies first, and make the consequential decision last, when you know the most. The graph is acyclic by construction, so an order always exists.
+_Avoid_: sort order, priority, ranking, review order
+
+**Walk Position**:
+Which Step a Review is on: the first Action Point in Dependency Order that is still Undecided, or none once every one has been decided. A query over rows already written, never stored progress — so closing the tab, crashing, deploying, or coming back the next day all land on the same Step.
+_Avoid_: progress, cursor, current index, session state
 
 **Push**:
 Sending the accepted Action Points from a Review into the user's Task Sink, creating real tasks there.
@@ -35,7 +51,7 @@ The anonymous run of the pipeline from the landing page: a real Extraction and R
 _Avoid_: preview, free preview, trial
 
 **Sample Meeting**:
-The one Extraction we author rather than run: a fictional Transcript and the Action Points that go with it, written down so the landing page can show the product working without a model call, a Credit, or a claim on the Demo's rate limit. Its content is chosen to put every state Review can show on the page at once — Blockers, a nesting, a Timing Quote with a date and one without, a deadline already past, an Action Point nobody was named for. It is a real Extraction row curated on the real Review screen; only the meeting is invented, and the screen says so. Everything else the visitor does with it — accepting, editing, Pushing — is the product.
+The one Extraction we author rather than run: a fictional Transcript and the Action Points that go with it, written down so the landing page can show the product working without a model call, a Credit, or a claim on the Demo's rate limit. Its content is chosen to put every state Review can show on the page at once — Blockers, a nesting, a Timing Quote with a date and one without, a deadline already past, an Action Point nobody was named for. It is a real Extraction row curated on the real Review screen; only the meeting is invented, and the screen says so. Everything else the visitor does with it — walking it, deciding it, Pushing it — is the product.
 _Avoid_: demo (the Demo is a real run of the pipeline), example, dummy data
 
 **Named Person**:

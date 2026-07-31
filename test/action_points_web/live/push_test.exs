@@ -134,19 +134,19 @@ defmodule ActionPointsWeb.PushTest do
                Application.get_env(:action_points, :fake_task_sink_pushes, [])
     end
 
-    test "pushed cards link to their issue and are no longer editable", %{conn: conn} do
+    test "pushed Action Points link to their issue and offer no more controls", %{conn: conn} do
       %{review: review, action_points: [first, _second]} = open_review(conn)
 
       push(review)
 
       assert has_element?(
                review,
-               ~s{#action_points-#{first.id} a[data-role=sink-issue]},
+               ~s{#decided-#{first.id} a[data-role=sink-issue]},
                "ENG-1"
              )
 
-      refute has_element?(review, "#action_points-#{first.id}-edit")
-      refute has_element?(review, "#action_points-#{first.id}-reject")
+      refute has_element?(review, "[data-role=step] [data-role=accept]")
+      refute has_element?(review, "[data-role=step] [data-role=reject]")
       refute has_element?(review, "#push-button")
     end
 
@@ -198,7 +198,7 @@ defmodule ActionPointsWeb.PushTest do
       {:ok, reloaded, _html} = live(conn, path)
 
       assert has_element?(reloaded, "#push-confirmation a", "ENG-1")
-      assert has_element?(reloaded, "#action-points a[data-role=sink-issue]", "ENG-2")
+      assert has_element?(reloaded, "#review-decided a[data-role=sink-issue]", "ENG-2")
       refute has_element?(reloaded, "#push-button")
     end
   end

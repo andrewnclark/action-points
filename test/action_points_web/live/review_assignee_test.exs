@@ -61,7 +61,7 @@ defmodule ActionPointsWeb.ReviewAssigneeTest do
     }
   end
 
-  defp dom_id(action_point), do: "action_points-#{action_point.id}"
+  defp step_id(action_point), do: "step-#{action_point.id}"
   defp picker_id(action_point), do: "action-point-#{action_point.id}-assignee"
   defp picker_form_id(action_point), do: "action-point-#{action_point.id}-assignee-form"
 
@@ -78,11 +78,11 @@ defmodule ActionPointsWeb.ReviewAssigneeTest do
 
     assert has_element?(
              review,
-             "##{dom_id(first)} option[value=u-priya][selected]",
+             "##{step_id(first)} option[value=u-priya][selected]",
              "Priya Sharma (@priya)"
            )
 
-    refute has_element?(review, "##{dom_id(first)} [data-role=assignee-suggested]")
+    refute has_element?(review, "##{step_id(first)} [data-role=assignee-suggested]")
   end
 
   test "an unambiguous name match pre-selects a suggestion, visibly marked", %{
@@ -98,8 +98,8 @@ defmodule ActionPointsWeb.ReviewAssigneeTest do
     %{review: review, action_points: [first]} =
       open_review(conn, [%{title: "Send the report", assignee_guess: "Priya Sharma"}])
 
-    assert has_element?(review, "##{dom_id(first)} option[value=u-priya][selected]")
-    assert has_element?(review, "##{dom_id(first)} [data-role=assignee-suggested]", "Suggested")
+    assert has_element?(review, "##{step_id(first)} option[value=u-priya][selected]")
+    assert has_element?(review, "##{step_id(first)} [data-role=assignee-suggested]", "Suggested")
   end
 
   test "an ambiguous guess shows unassigned, with an open picker to fix it", %{
@@ -143,8 +143,8 @@ defmodule ActionPointsWeb.ReviewAssigneeTest do
     |> element("##{picker_form_id(first)}")
     |> render_change(%{"sink_user_id" => "u-priya"})
 
-    assert has_element?(review, "##{dom_id(first)} option[value=u-priya][selected]")
-    refute has_element?(review, "##{dom_id(first)} [data-role=assignee-suggested]")
+    assert has_element?(review, "##{step_id(first)} option[value=u-priya][selected]")
+    refute has_element?(review, "##{step_id(first)} [data-role=assignee-suggested]")
 
     # The user's own pick writes the handle down too — it is the path taken
     # after a wrong suggestion, and the row must not come out of it knowing
@@ -174,7 +174,7 @@ defmodule ActionPointsWeb.ReviewAssigneeTest do
     |> render_change(%{"sink_user_id" => ""})
 
     assert has_element?(review, "##{picker_id(first)} option[value=''][selected]")
-    refute has_element?(review, "##{dom_id(first)} [data-role=assignee-suggested]")
+    refute has_element?(review, "##{step_id(first)} [data-role=assignee-suggested]")
   end
 
   test "a failed member fetch shows a notice and the raw guess as plain text", %{
@@ -189,7 +189,12 @@ defmodule ActionPointsWeb.ReviewAssigneeTest do
 
     assert has_element?(review, "#assignee-degraded-notice")
     refute has_element?(review, "##{picker_id(first)}")
-    assert has_element?(review, "##{dom_id(first)} [data-role=named-person]", "Priya")
+    assert has_element?(review, "##{step_id(first)} [data-role=named-person]", "Priya")
+
+    # "Nobody matched" is a claim about the workspace, and this Review never
+    # read one — so the Sink Member side says nothing at all rather than
+    # something false.
+    refute has_element?(review, "##{step_id(first)} [data-role=sink-member]")
   end
 
   # The Named Person is a record of what the meeting said, so it survives every
@@ -206,7 +211,7 @@ defmodule ActionPointsWeb.ReviewAssigneeTest do
       open_review(conn, [%{title: "Send the report", assignee_guess: "Priya"}])
 
     assert has_element?(review, "##{picker_id(first)}")
-    assert has_element?(review, "##{dom_id(first)} [data-role=named-person]", "Priya")
+    assert has_element?(review, "##{step_id(first)} [data-role=named-person]", "Priya")
   end
 
   test "the Named Person stays on screen beside an unmatched picker", %{conn: conn, scope: scope} do
@@ -220,7 +225,7 @@ defmodule ActionPointsWeb.ReviewAssigneeTest do
       open_review(conn, [%{title: "Book the venue", assignee_guess: "Bogdan"}])
 
     assert has_element?(review, "##{picker_id(first)} option[value=''][selected]")
-    assert has_element?(review, "##{dom_id(first)} [data-role=named-person]", "Bogdan")
+    assert has_element?(review, "##{step_id(first)} [data-role=named-person]", "Bogdan")
   end
 
   # Once the member list is unavailable there is no picker, but both facts are
@@ -246,13 +251,14 @@ defmodule ActionPointsWeb.ReviewAssigneeTest do
     {:ok, revisit, _html} = live(conn, path)
 
     refute has_element?(revisit, "##{picker_id(first)}")
-    assert has_element?(revisit, "##{dom_id(first)} [data-role=named-person]", "Priya Sharma")
-    assert has_element?(revisit, "##{dom_id(first)} [data-role=sink-member]", "@priya")
+    assert has_element?(revisit, "##{step_id(first)} [data-role=named-person]", "Priya Sharma")
+    assert has_element?(revisit, "##{step_id(first)} [data-role=sink-member]", "@priya")
   end
 
-  # An Action Point nobody was named for has no Named Person to render; the
-  # Sink Member side still says what it knows.
-  test "an Action Point with no Named Person renders only the Sink Member side", %{
+  # An Action Point nobody was named for still states that, rather than
+  # leaving the row blank: "nobody was named" is a fact about the meeting, and
+  # a gap reads as nobody having looked.
+  test "an Action Point with no Named Person says so, and still offers the picker", %{
     conn: conn,
     scope: scope
   } do
@@ -265,7 +271,7 @@ defmodule ActionPointsWeb.ReviewAssigneeTest do
     %{review: review, action_points: [first]} =
       open_review(conn, [%{title: "Circulate the notes", assignee_guess: nil}])
 
-    refute has_element?(review, "##{dom_id(first)} [data-role=named-person]")
+    assert has_element?(review, "##{step_id(first)} [data-role=named-person]", "Nobody was named")
     assert has_element?(review, "##{picker_id(first)}")
   end
 end

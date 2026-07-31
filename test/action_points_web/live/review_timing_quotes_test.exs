@@ -42,7 +42,7 @@ defmodule ActionPointsWeb.ReviewTimingQuotesTest do
                        }
                      ]}
 
-  defp open_review(conn) do
+  defp open_review(conn, opts \\ []) do
     stub_extractor(@extractor_result)
 
     conn = get(conn, ~p"/")
@@ -54,40 +54,57 @@ defmodule ActionPointsWeb.ReviewTimingQuotesTest do
     Meetings.run_extraction(extraction)
     action_points = Meetings.get_extraction!(extraction.id, session_token).action_points
 
+    case Keyword.get(opts, :walk_to) do
+      nil -> :ok
+      index -> walk_to(extraction.id, Enum.at(action_points, index))
+    end
+
     {:ok, review, _html} = live(conn, ~p"/review/#{extraction}")
     %{review: review, action_points: action_points}
   end
 
-  defp dom_id(action_point), do: "action_points-#{action_point.id}"
+  defp step_id(action_point), do: "step-#{action_point.id}"
 
-  test "the Timing Quote renders beneath the due date it was resolved from", %{conn: conn} do
+  # The Timing Quote is what the meeting said, so it stands in the left column
+  # with the rest of the record — and the due date it was resolved to stands
+  # opposite it, in the issue we would create. Set against each other, a
+  # misattribution is visible without reopening the Transcript.
+  test "the Timing Quote is the meeting's words, the due date the resolution", %{conn: conn} do
     %{review: review, action_points: [dated, _vague, _silent]} = open_review(conn)
 
-    assert has_element?(review, "##{dom_id(dated)} [data-role=due-date]", "20 Mar 2026")
+    step = "##{step_id(dated)}"
 
     assert has_element?(
              review,
-             "##{dom_id(dated)}-timing-quote",
+             "#{step} [data-role=meeting-column] [data-role=timing-quote]",
              "by Friday the 20th of March"
            )
 
-    # Beneath, not above: the date is the claim and the words are the check.
-    card = review |> element("##{dom_id(dated)}") |> render()
+    assert has_element?(
+             review,
+             "#{step} [data-role=issue-column] [data-role=due-date]",
+             "20 Mar 2026"
+           )
 
-    assert :binary.match(card, "data-role=\"due-date\"") <
-             :binary.match(card, "data-role=\"timing-quote\"")
+    refute has_element?(review, "#{step} [data-role=meeting-column] [data-role=due-date]")
   end
 
-  test "the Timing Quote renders standalone when no due date could be resolved", %{conn: conn} do
-    %{review: review, action_points: [_dated, vague, _silent]} = open_review(conn)
+  test "the Timing Quote stands alone when no due date could be resolved", %{conn: conn} do
+    %{review: review, action_points: [_dated, vague, _silent]} = open_review(conn, walk_to: 1)
 
-    assert has_element?(review, "##{dom_id(vague)} [data-role=no-due-date]")
-    assert has_element?(review, "##{dom_id(vague)}-timing-quote", "in a few weeks")
+    assert has_element?(review, "##{step_id(vague)} [data-role=no-due-date]")
+    assert has_element?(review, "##{step_id(vague)} [data-role=timing-quote]", "in a few weeks")
   end
 
-  test "an Action Point the meeting said nothing timely about shows no quote", %{conn: conn} do
-    %{review: review, action_points: [_dated, _vague, silent]} = open_review(conn)
+  test "an Action Point the meeting said nothing timely about says so", %{conn: conn} do
+    %{review: review, action_points: [_dated, _vague, silent]} = open_review(conn, walk_to: 2)
 
-    refute has_element?(review, "##{dom_id(silent)}-timing-quote")
+    refute has_element?(review, "##{step_id(silent)} [data-role=timing-quote]")
+
+    assert has_element?(
+             review,
+             "##{step_id(silent)} [data-role=meeting-column]",
+             "Nothing was said about when"
+           )
   end
 end

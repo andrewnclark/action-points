@@ -572,14 +572,12 @@ defmodule ActionPoints.Meetings do
   end
 
   @doc """
-  Returns a changeset for the Review's inline-edit form.
-  """
-  def change_action_point(%ActionPoint{} = action_point, attrs \\ %{}) do
-    ActionPoint.curation_changeset(action_point, attrs)
-  end
+  Applies Review's correction of an Action Point.
 
-  @doc """
-  Applies the user's Review edits to an Action Point.
+  Since ADR-0010 the only correction with a control is the due date — a date
+  the meeting got wrong, changed or cleared from its pill. `curation_changeset/2`
+  is what bounds this: the Named Person is not castable there, so a crafted
+  submit naming it changes nothing.
   """
   def update_action_point(%ActionPoint{} = action_point, attrs) do
     action_point
@@ -754,25 +752,6 @@ defmodule ActionPoints.Meetings do
     extraction_id
     |> list_action_points_in_dependency_order()
     |> Enum.find(&(&1.status == :undecided))
-  end
-
-  @doc """
-  Orders a Review's Action Points for its indented one-level list: top-level
-  Action Points by position, each followed immediately by its Subtasks in
-  position order. Pure — feed it the preloaded, position-ordered list.
-
-  The list's own display order, unrelated to the order the walk decides them
-  in — see `list_action_points_in_dependency_order/1` for that.
-  """
-  def order_for_review(action_points) do
-    subtasks =
-      action_points
-      |> Enum.filter(& &1.parent_id)
-      |> Enum.group_by(& &1.parent_id)
-
-    action_points
-    |> Enum.filter(&is_nil(&1.parent_id))
-    |> Enum.flat_map(fn parent -> [parent | Map.get(subtasks, parent.id, [])] end)
   end
 
   @doc """
