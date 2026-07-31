@@ -178,8 +178,9 @@ defmodule ActionPointsWeb.HomeLive do
             </span>
             <h3 class="mt-2 font-semibold">Review the Action Points</h3>
             <p class="mt-1.5 text-base-content/70">
-              Every commitment comes back with a title, context, an assignee guess,
-              and any due date said aloud. Reject the noise, edit the keepers.
+              Every commitment comes back with a title, context, the name the
+              meeting said, and any due date said aloud. Reject the noise, edit
+              the keepers.
             </p>
           </li>
           <li class="bg-base-200 p-5">

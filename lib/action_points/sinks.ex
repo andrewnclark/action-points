@@ -175,7 +175,7 @@ defmodule ActionPoints.Sinks do
     task = %{
       title: action_point.title,
       description: compose_description(action_point),
-      assignee_id: action_point.assignee_sink_user_id,
+      assignee_id: action_point.sink_member_id,
       due_date: action_point.due_date,
       parent_id: parent_sink_issue_id(action_point)
     }
@@ -261,7 +261,7 @@ defmodule ActionPoints.Sinks do
   # unassigned Action Point: that must never harden into "this name means
   # nobody," and an unguessed Action Point has no name to key a mapping on.
   defp remember_assignee_pick(_connection, %{assignee_guess: nil}), do: :ok
-  defp remember_assignee_pick(_connection, %{assignee_sink_user_id: nil}), do: :ok
+  defp remember_assignee_pick(_connection, %{sink_member_id: nil}), do: :ok
 
   defp remember_assignee_pick(connection, action_point) do
     key = AssigneeMapping.normalize(action_point.assignee_guess)
@@ -269,10 +269,11 @@ defmodule ActionPoints.Sinks do
     current =
       Repo.get_by(AssigneeMapping, sink_connection_id: connection.id, normalized_guess: key)
 
-    unless current && current.sink_user_id == action_point.assignee_sink_user_id do
+    unless current && current.sink_user_id == action_point.sink_member_id do
       put_assignee_mapping(connection, action_point.assignee_guess, %{
-        id: action_point.assignee_sink_user_id,
-        name: action_point.assignee_display_name
+        id: action_point.sink_member_id,
+        name: action_point.sink_member_name,
+        handle: action_point.sink_member_handle
       })
     end
   end
@@ -331,11 +332,19 @@ defmodule ActionPoints.Sinks do
 
     case {Map.get(mappings, key), match_by_name(action_point.assignee_guess, users)} do
       {%AssigneeMapping{} = mapping, _} ->
-        sink_user = %{id: mapping.sink_user_id, name: mapping.display_name}
-        Meetings.resolve_action_point_assignee(action_point, :mapped, sink_user)
+        # The mapping's own cached name and handle, not the live list's: the
+        # mapping is what survives to a later visit, so what it holds is what
+        # the Action Point should be told.
+        sink_member = %{
+          id: mapping.sink_user_id,
+          name: mapping.display_name,
+          handle: mapping.handle
+        }
 
-      {nil, %{} = sink_user} ->
-        Meetings.resolve_action_point_assignee(action_point, :suggested, sink_user)
+        Meetings.resolve_action_point_assignee(action_point, :mapped, sink_member)
+
+      {nil, %{} = sink_member} ->
+        Meetings.resolve_action_point_assignee(action_point, :suggested, sink_member)
 
       {nil, nil} ->
         Meetings.resolve_action_point_assignee(action_point, :unassigned, nil)

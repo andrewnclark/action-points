@@ -46,7 +46,7 @@ ActionPoints takes a meeting Transcript (pasted, or an uploaded `.txt`/`.vtt`/`.
 
 16. As a user, I want every Action Point presented accepted-by-default with a way to reject each one, so that curation is one quick pass of unticking noise.
 17. As a user, I want to edit an Action Point's title and description inline, so that I can fix the model's phrasing without a round trip.
-18. As a user, I want to change or clear the assignee guess and due date, so that wrong guesses never reach my workspace.
+18. As a user, I want to change or clear the due date, and to say which Sink Member the Named Person is, so that wrong guesses never reach my workspace. The Named Person itself is a record of the meeting and is not mine to rewrite (ADR-0010).
 19. As a user, I want nothing pushed to any Task Sink without passing my Review, so that my Linear workspace is never spammed (ADR-0005).
 20. As a user, I want a count of accepted Action Points on the Push button, so that I know exactly what's about to be created.
 

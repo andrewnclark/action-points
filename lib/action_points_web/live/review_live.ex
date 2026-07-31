@@ -315,17 +315,13 @@ defmodule ActionPointsWeb.ReviewLive do
                       rows="3"
                       label="Description"
                     />
-                    <div class="grid gap-x-3 sm:grid-cols-2">
-                      <%!-- Once the sink is live, the assignee is set from the
-                      picker on the card itself, not here — that picker is a
-                      real member, and this field would only be raw text. --%>
-                      <.input
-                        :if={not @sink_live?}
-                        field={@edit_form[:assignee_guess]}
-                        type="text"
-                        label="Assignee"
-                        placeholder="Unassigned"
-                      />
+                    <div class="grid gap-x-3">
+                      <%!-- There is no field for the Named Person. It is what
+                      the meeting said, not a claim about the workspace, so
+                      Review has nothing to correct in it — and it is also the
+                      Assignee Mapping key, so rewriting it silently re-keyed
+                      any mapping born from it. The Sink Member is picked on
+                      the card itself, against real members. --%>
                       <.input field={@edit_form[:due_date]} type="date" label="Due date" />
                     </div>
                     <div class="flex justify-end gap-2 pt-1">
@@ -695,19 +691,29 @@ defmodule ActionPointsWeb.ReviewLive do
   defp past_due?(nil, _today), do: false
   defp past_due?(%Date{} = due_date, %Date{} = today), do: Date.before?(due_date, today)
 
-  # One Action Point's assignee: a live picker once the sink is connected and
-  # reachable and the Action Point isn't pushed yet, otherwise a static chip
-  # — the resolved member if Review has settled one, the raw guess if it
-  # never got the chance to (no connection, or a degraded fetch), or nothing
-  # at all when there was never a guess. Nothing is guessed silently: an
-  # ambiguous or unmatched guess reads as "Unassigned" once resolved, never
-  # as the raw name pretending to be a real pick.
+  # An assignee is two facts and both stay on screen (CONTEXT.md, ADR-0010).
+  #
+  # The Named Person — what the meeting said — is rendered first and on every
+  # branch, because it is a record and cannot be wrong. It is rendered beside
+  # the picker most of all: the picker asks "who is this person in your
+  # workspace?", and dropping the name is dropping the question.
+  #
+  # The Sink Member — the only part that can be wrong — is a live picker once
+  # the sink is connected and reachable and the Action Point isn't pushed yet,
+  # otherwise a static chip: the resolved member if Review settled one,
+  # "Unassigned" if it settled on nobody, and nothing at all if Review never
+  # got the chance (no connection, or a degraded fetch). Nothing is guessed
+  # silently: an ambiguous or unmatched Named Person reads as "Unassigned"
+  # once resolved, never as the meeting's name pretending to be a real pick.
   attr :action_point, :map, required: true
   attr :sink_users, :list, required: true
   attr :pickable, :boolean, required: true
 
   defp assignee_field(assigns) do
     ~H"""
+    <.chip :if={@action_point.assignee_guess} role="named-person" icon="hero-user-micro">
+      {@action_point.assignee_guess}
+    </.chip>
     <%= cond do %>
       <% @pickable -> %>
         <%!-- phx-value-id lives on the form, not the select: LiveView only
@@ -725,13 +731,13 @@ defmodule ActionPointsWeb.ReviewLive do
             data-role="assignee-picker"
             class="select select-xs w-auto max-w-[16rem]"
           >
-            <option value="" selected={is_nil(@action_point.assignee_sink_user_id)}>
+            <option value="" selected={is_nil(@action_point.sink_member_id)}>
               Unassigned — pick a member
             </option>
             <option
               :for={user <- @sink_users}
               value={user.id}
-              selected={@action_point.assignee_sink_user_id == user.id}
+              selected={@action_point.sink_member_id == user.id}
             >
               {user.name} (@{user.handle})
             </option>
@@ -744,17 +750,29 @@ defmodule ActionPointsWeb.ReviewLive do
             Suggested
           </span>
         </form>
-      <% @action_point.assignee_resolution && @action_point.assignee_sink_user_id -> %>
-        <.chip role="assignee" icon="hero-user-micro">
-          {@action_point.assignee_display_name}
+      <% @action_point.assignee_resolution && @action_point.sink_member_id -> %>
+        <.chip role="sink-member" icon="hero-arrow-right-micro">
+          {sink_member_label(@action_point)}
         </.chip>
       <% @action_point.assignee_resolution -> %>
-        <.chip role="assignee" icon="hero-user-micro" empty>Unassigned</.chip>
-      <% @action_point.assignee_guess -> %>
-        <.chip role="assignee" icon="hero-user-micro">{@action_point.assignee_guess}</.chip>
+        <.chip role="sink-member" icon="hero-arrow-right-micro" empty>Unassigned</.chip>
       <% true -> %>
     <% end %>
     """
+  end
+
+  # Name and handle, the same shape the picker's options use, so the chip a
+  # pushed Action Point falls back to reads as the pick that was made. The
+  # handle is here at all because it was written down when the member list was
+  # reachable. It can still be absent — a row resolved before the column
+  # existed, or a pick made from a source that carried no handle — and the
+  # name alone is a worse answer than nothing, so it stands in.
+  defp sink_member_label(%{sink_member_handle: nil} = action_point) do
+    action_point.sink_member_name
+  end
+
+  defp sink_member_label(action_point) do
+    "#{action_point.sink_member_name} (@#{action_point.sink_member_handle})"
   end
 
   defp editing?(nil, _action_point), do: false

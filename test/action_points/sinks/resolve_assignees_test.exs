@@ -45,7 +45,12 @@ defmodule ActionPoints.Sinks.ResolveAssigneesTest do
   end
 
   test "a mapping hit resolves without consulting the sink's names", %{scope: scope} do
-    {:ok, _} = Sinks.put_assignee_mapping(scope, "Bob", %{id: "u-mapped", name: "Bob Stored"})
+    {:ok, _} =
+      Sinks.put_assignee_mapping(scope, "Bob", %{
+        id: "u-mapped",
+        name: "Bob Stored",
+        handle: "bstored"
+      })
 
     Application.put_env(:action_points, :fake_task_sink,
       users: {:ok, [%{id: "u-other", name: "Bob", handle: "bob"}]}
@@ -57,8 +62,12 @@ defmodule ActionPoints.Sinks.ResolveAssigneesTest do
 
     resolved = Meetings.get_action_point!(action_point.id, @session_token)
     assert resolved.assignee_resolution == :mapped
-    assert resolved.assignee_sink_user_id == "u-mapped"
-    assert resolved.assignee_display_name == "Bob Stored"
+    assert resolved.sink_member_id == "u-mapped"
+    assert resolved.sink_member_name == "Bob Stored"
+
+    # The handle comes from the mapping's own cache, not from the live list —
+    # the mapping is what a later visit still has.
+    assert resolved.sink_member_handle == "bstored"
   end
 
   test "an unambiguous full-name match resolves as a suggestion", %{scope: scope} do
@@ -72,8 +81,9 @@ defmodule ActionPoints.Sinks.ResolveAssigneesTest do
 
     resolved = Meetings.get_action_point!(action_point.id, @session_token)
     assert resolved.assignee_resolution == :suggested
-    assert resolved.assignee_sink_user_id == "u-1"
-    assert resolved.assignee_display_name == "Bob Smith"
+    assert resolved.sink_member_id == "u-1"
+    assert resolved.sink_member_name == "Bob Smith"
+    assert resolved.sink_member_handle == "bsmith"
   end
 
   test "an unambiguous first-name match resolves as a suggestion, never a handle match", %{
@@ -94,11 +104,11 @@ defmodule ActionPoints.Sinks.ResolveAssigneesTest do
     # "Andrew" never resolves off the handle, even though it matches exactly.
     resolved_andrew = Meetings.get_action_point!(andrew.id, @session_token)
     assert resolved_andrew.assignee_resolution == :unassigned
-    assert resolved_andrew.assignee_sink_user_id == nil
+    assert resolved_andrew.sink_member_id == nil
 
     resolved_bob = Meetings.get_action_point!(bob.id, @session_token)
     assert resolved_bob.assignee_resolution == :suggested
-    assert resolved_bob.assignee_sink_user_id == "u-1"
+    assert resolved_bob.sink_member_id == "u-1"
   end
 
   # The fold applies to both sides of the comparison, not just the guess: a
@@ -115,7 +125,7 @@ defmodule ActionPoints.Sinks.ResolveAssigneesTest do
 
     resolved = Meetings.get_action_point!(action_point.id, @session_token)
     assert resolved.assignee_resolution == :suggested
-    assert resolved.assignee_sink_user_id == "u-1"
+    assert resolved.sink_member_id == "u-1"
   end
 
   test "an ambiguous first name resolves as unassigned, never guessed", %{scope: scope} do
@@ -134,7 +144,7 @@ defmodule ActionPoints.Sinks.ResolveAssigneesTest do
 
     resolved = Meetings.get_action_point!(action_point.id, @session_token)
     assert resolved.assignee_resolution == :unassigned
-    assert resolved.assignee_sink_user_id == nil
+    assert resolved.sink_member_id == nil
   end
 
   test "an Action Point with no guess resolves as unassigned", %{scope: scope} do
@@ -165,7 +175,7 @@ defmodule ActionPoints.Sinks.ResolveAssigneesTest do
 
     resolved = Meetings.get_action_point!(action_point.id, @session_token)
     assert resolved.assignee_resolution == :unassigned
-    assert resolved.assignee_sink_user_id == nil
+    assert resolved.sink_member_id == nil
   end
 
   test "returns :not_connected when the user has no Sink Connection" do
