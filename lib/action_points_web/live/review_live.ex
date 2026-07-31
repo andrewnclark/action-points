@@ -8,13 +8,14 @@ defmodule ActionPointsWeb.ReviewLive do
 
   alias ActionPoints.Billing
   alias ActionPoints.Meetings
+  alias ActionPoints.Meetings.DependencyOrder
   alias ActionPoints.Sinks
   alias ActionPointsWeb.LocalDate
 
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope} max_width="max-w-3xl">
+    <Layouts.app flash={@flash} current_scope={@current_scope} max_width="max-w-5xl">
       <div>
         <%= case @extraction.status do %>
           <% status when status in [:pending, :running] -> %>
@@ -116,7 +117,7 @@ defmodule ActionPointsWeb.ReviewLive do
               <.icon name="hero-beaker" class="size-5 shrink-0 text-base-content/65" />
               <p class="text-base-content/70">
                 This is the sample meeting — an invented Transcript, so you can see the Review
-                before you spend anything on your own. Curate it, edit it, break it.
+                before you spend anything on your own. Walk it, decide it, break it.
                 <.link navigate={~p"/"} class="text-accent hover:underline">
                   Paste your own Transcript
                 </.link>
@@ -158,7 +159,7 @@ defmodule ActionPointsWeb.ReviewLive do
             >
               <.icon name="hero-exclamation-triangle" class="size-5 shrink-0 text-warning" />
               <p class="text-base-content/70">
-                Linear's member list couldn't be reached, so guessed names are shown as text below.
+                Linear's member list couldn't be reached, so guessed names are shown as text and nothing is resolved.
                 Pushing now leaves them unassigned — reload once Linear is reachable to resolve them.
               </p>
             </div>
@@ -175,8 +176,8 @@ defmodule ActionPointsWeb.ReviewLive do
             >
               <.icon name="hero-exclamation-triangle" class="size-5 shrink-0 text-warning" />
               <p class="text-base-content/70">
-                Your Task Sink doesn't support blocked-by relations, so the relations below stay
-                here — Pushing creates the tasks without them.
+                Your Task Sink doesn't support blocked-by relations, so the relations this Review
+                carries stay here — Pushing creates the tasks without them.
               </p>
             </div>
 
@@ -193,11 +194,11 @@ defmodule ActionPointsWeb.ReviewLive do
               <.icon name="hero-exclamation-triangle" class="size-5 shrink-0 text-warning" />
               <p class="text-base-content/70">
                 This Task Sink can't represent Subtasks, so Pushing creates them as
-                ordinary top-level tasks. The nesting below still shapes your Review.
+                ordinary top-level tasks. The nesting still shapes your Review.
               </p>
             </div>
 
-            <%!-- Said once, above the cards, because the reason matters and
+            <%!-- Said once, above the walk, because the reason matters and
             does not bear repeating on every chip: a date we resolved wrongly
             becomes someone else's overdue task the moment it is Pushed. The
             Push is not blocked — the decision stays the user's. --%>
@@ -210,8 +211,8 @@ defmodule ActionPointsWeb.ReviewLive do
               <.icon name="hero-exclamation-triangle" class="size-5 shrink-0 text-warning" />
               <p class="text-base-content/70">
                 {ngettext(
-                  "1 accepted Action Point has a due date that has already passed, so Pushing creates it already overdue in Linear. Edit or clear the date if the meeting meant something else.",
-                  "%{count} accepted Action Points have due dates that have already passed, so Pushing creates them already overdue in Linear. Edit or clear the dates if the meeting meant something else.",
+                  "1 accepted Action Point has a due date that has already passed, so Pushing creates it already overdue in Linear. Change or clear the date if the meeting meant something else.",
+                  "%{count} accepted Action Points have due dates that have already passed, so Pushing creates them already overdue in Linear. Change or clear the dates if the meeting meant something else.",
                   @past_due_count
                 )}
               </p>
@@ -288,248 +289,79 @@ defmodule ActionPointsWeb.ReviewLive do
               </div>
             </div>
 
-            <ul id="action-points" phx-update="stream" class="space-y-2">
-              <li
-                :for={{dom_id, action_point} <- @streams.action_points}
-                id={dom_id}
-                data-status={action_point.status}
-                data-parent-id={action_point.parent_id}
-                class={[
-                  "group relative rounded-box border p-4 transition-colors",
-                  action_point.parent_id && "ml-6 sm:ml-10",
-                  card_class(@editing, action_point)
-                ]}
-              >
-                <%= if editing?(@editing, action_point) do %>
-                  <%!-- Editing is a different mode, and the card says so out loud
-                  rather than relying on the reader spotting the inputs. --%>
-                  <span class="absolute -top-2.5 left-3 rounded-[3px] bg-primary px-1.5 py-0.5 text-[10px] font-semibold tracking-[0.09em] text-primary-content uppercase">
-                    Editing
+            <%!-- One Action Point per screen, in dependency order, until every
+            one has been decided (ADR-0010). The position is a query over the
+            rows, never held in this process, so a reload, a crash or a deploy
+            all land back on the same step. --%>
+            <.step
+              :if={@step}
+              action_point={@step}
+              sink_users={@sink_users}
+              sink_live?={@sink_live?}
+              decided_count={@accepted_count + @rejected_count}
+              action_point_count={@action_point_count}
+              today={@today}
+            />
+            <%!-- The walk is over and the summary that holds the set, its
+            relations and the Push is #108's. Until it lands, the decisions
+            are stated plainly so the end of the walk is not a blank screen. --%>
+            <div :if={is_nil(@step)} id="review-decided" class="py-2">
+              <h2 class="text-lg font-semibold">Every Action Point decided</h2>
+              <ul class="mt-3 space-y-2">
+                <li
+                  :for={action_point <- @decided}
+                  id={"decided-#{action_point.id}"}
+                  data-role="decided-row"
+                  data-status={action_point.status}
+                  class={[
+                    "flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-box border p-3",
+                    (action_point.status == :rejected &&
+                       "border-dashed border-base-300 bg-transparent") ||
+                      "border-base-300/60 bg-base-200"
+                  ]}
+                >
+                  <span class={[
+                    "font-medium",
+                    action_point.status == :rejected && "text-base-content/65 line-through"
+                  ]}>
+                    {action_point.title}
                   </span>
-                  <.form
-                    for={@edit_form}
-                    id={"edit-#{dom_id}"}
-                    phx-submit="save_edit"
-                    class="space-y-1"
-                  >
-                    <.input field={@edit_form[:title]} type="text" label="Title" />
-                    <.input
-                      field={@edit_form[:description]}
-                      type="textarea"
-                      rows="3"
-                      label="Description"
-                    />
-                    <div class="grid gap-x-3">
-                      <%!-- There is no field for the Named Person. It is what
-                      the meeting said, not a claim about the workspace, so
-                      Review has nothing to correct in it — and it is also the
-                      Assignee Mapping key, so rewriting it silently re-keyed
-                      any mapping born from it. The Sink Member is picked on
-                      the card itself, against real members. --%>
-                      <.input field={@edit_form[:due_date]} type="date" label="Due date" />
-                    </div>
-                    <div class="flex justify-end gap-2 pt-1">
-                      <button
-                        id={"#{dom_id}-cancel"}
-                        type="button"
-                        class="btn btn-ghost btn-sm"
-                        phx-click="cancel_edit"
-                      >
-                        Cancel
-                      </button>
-                      <button id={"#{dom_id}-save"} class="btn btn-primary btn-sm">Save</button>
-                    </div>
-                  </.form>
-                <% else %>
-                  <div class="flex items-start justify-between gap-3">
-                    <h2 class={[
-                      "leading-snug font-semibold",
-                      action_point.status == :rejected && "text-base-content/65 line-through"
-                    ]}>
-                      {action_point.title}
-                    </h2>
-                    <div class="flex shrink-0 gap-0.5 opacity-60 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-                      <%!-- A wrong nesting costs one click: promote lifts the
-                      Subtask to top level. Gone once pushed — the sink-side
-                      hierarchy was already created. --%>
-                      <button
-                        :if={action_point.parent_id && is_nil(action_point.sink_issue_id)}
-                        id={"#{dom_id}-promote"}
-                        phx-click="promote"
-                        phx-value-id={action_point.id}
-                        class="btn btn-ghost btn-xs"
-                        title="Promote to top level"
-                      >
-                        <.icon name="hero-arrow-up-left-micro" class="size-3.5" /> Promote
-                      </button>
-                      <%= cond do %>
-                        <% action_point.sink_issue_id -> %>
-                          <a
-                            data-role="sink-issue"
-                            href={action_point.sink_issue_url}
-                            target="_blank"
-                            rel="noopener"
-                            class="inline-flex items-center gap-1 rounded-field border border-success/40 bg-success/10 px-2 py-0.5 text-xs font-medium text-success"
-                            title="Created in your Task Sink"
-                          >
-                            <.icon name="hero-check-micro" class="size-3" />
-                            {action_point.sink_issue_identifier}
-                          </a>
-                        <% action_point.status == :accepted -> %>
-                          <button
-                            id={"#{dom_id}-edit"}
-                            phx-click="edit"
-                            phx-value-id={action_point.id}
-                            class="btn btn-ghost btn-xs"
-                            title="Edit this Action Point"
-                          >
-                            <.icon name="hero-pencil-square-micro" class="size-3.5" /> Edit
-                          </button>
-                          <button
-                            id={"#{dom_id}-reject"}
-                            phx-click="reject"
-                            phx-value-id={action_point.id}
-                            class="btn btn-ghost btn-xs"
-                            title="Reject this Action Point"
-                          >
-                            <.icon name="hero-x-mark-micro" class="size-3.5" /> Reject
-                          </button>
-                        <% true -> %>
-                          <button
-                            id={"#{dom_id}-accept"}
-                            phx-click="accept"
-                            phx-value-id={action_point.id}
-                            class="btn btn-outline btn-xs"
-                            title="Accept this Action Point"
-                          >
-                            <.icon
-                              name={
-                                if action_point.status == :rejected,
-                                  do: "hero-arrow-uturn-left-micro",
-                                  else: "hero-check-micro"
-                              }
-                              class="size-3.5"
-                            /> Accept
-                          </button>
-                      <% end %>
-                    </div>
-                  </div>
-                  <p
-                    :if={action_point.description}
-                    class={[
-                      "mt-1.5",
-                      (action_point.status == :rejected && "text-base-content/65") ||
-                        "text-base-content/70"
-                    ]}
-                  >
-                    {action_point.description}
-                  </p>
-                  <%!-- Grounding Quotes: verified human speech, visibly set
-                  apart from the model's prose and collapsed so the Review
-                  stays scannable. Removable, never editable — an edited
-                  quote would no longer be evidence. --%>
-                  <details
-                    :if={action_point.quotes != []}
-                    id={"#{dom_id}-quotes"}
-                    data-role="grounding-quotes"
-                    class="mt-2"
-                  >
-                    <summary class="cursor-pointer text-xs text-base-content/65 select-none hover:text-base-content/80">
-                      From the meeting · {ngettext(
-                        "1 quote",
-                        "%{count} quotes",
-                        length(action_point.quotes)
-                      )}
-                    </summary>
-                    <ul class="mt-2 space-y-2">
-                      <li
-                        :for={{quote, index} <- Enum.with_index(action_point.quotes)}
-                        class="flex items-start gap-2"
-                      >
-                        <blockquote class="flex-1 border-l-2 border-base-300 pl-3 text-base-content/70 italic">
-                          {quote}
-                        </blockquote>
-                        <button
-                          :if={is_nil(action_point.sink_issue_id)}
-                          id={"#{dom_id}-quote-#{index}-remove"}
-                          phx-click="remove_quote"
-                          phx-value-id={action_point.id}
-                          phx-value-index={index}
-                          class="btn btn-ghost btn-xs"
-                          title="Remove this quote"
-                          aria-label="Remove this quote"
-                        >
-                          <.icon name="hero-x-mark-micro" class="size-3.5" />
-                        </button>
-                      </li>
-                    </ul>
-                  </details>
-                  <%!-- Assignee, due date, and whatever Blockers the meeting
-                  stated. Nothing goes in this row that the card already states
-                  by position — nesting is carried by the indent alone (#93) —
-                  because the row is read as a column down the list. --%>
-                  <div class="mt-3 flex flex-wrap items-center gap-1.5">
-                    <.assignee_field
-                      action_point={action_point}
-                      sink_users={@sink_users}
-                      pickable={@sink_live? and is_nil(action_point.sink_issue_id)}
-                    />
-                    <.due_date_field action_point={action_point} today={@today} />
-                    <%!-- Blockers: the ordering the meeting stated. Removable
-                    until the relation is real in the Task Sink — a wrong guess
-                    costs one click — but never addable here (ADR-0009). --%>
-                    <span
-                      :for={blocker <- action_point.blockers}
-                      data-role="blocker"
-                      class="inline-flex items-center gap-1 rounded-field border border-base-300 px-2 py-0.5 text-xs text-base-content/70"
+                  <span class="ml-auto flex flex-wrap items-center gap-1.5">
+                    <%!-- Rejecting is one click and a mis-click is one too, so
+                    the way back stays under the hand: a rejection is reversible
+                    into an acceptance, exactly as it was on the old card. The
+                    walk never sends anything back to undecided — a decision is
+                    a one-way step (ADR-0010) — and re-accepting does not
+                    resurrect the Blockers the rejection removed. --%>
+                    <button
+                      :if={action_point.status == :rejected and is_nil(action_point.sink_issue_id)}
+                      id={"decided-#{action_point.id}-accept"}
+                      phx-click="accept"
+                      phx-value-id={action_point.id}
+                      class="btn btn-ghost btn-xs"
+                      title="Accept this Action Point after all"
                     >
-                      <.icon name="hero-hand-raised-micro" class="size-3 text-base-content/65" />
-                      Blocked by:
-                      <span class="max-w-[14rem] truncate font-medium">
-                        {blocker.blocked_by.title}
-                      </span>
-                      <%!-- Removable until the relation itself is real in the
-                      sink — even when this Action Point's issue already is,
-                      or a relation the sink keeps refusing could never be
-                      taken back. --%>
-                      <button
-                        :if={is_nil(blocker.sink_relation_id)}
-                        id={"#{dom_id}-blocker-#{blocker.id}-remove"}
-                        phx-click="remove_blocker"
-                        phx-value-id={blocker.id}
-                        class="-mr-0.5 grid place-items-center rounded-[3px] p-0.5 hover:bg-base-300"
-                        title="Remove this relation"
-                        aria-label="Remove this relation"
-                      >
-                        <.icon name="hero-x-mark-micro" class="size-3" />
-                      </button>
-                    </span>
-                  </div>
-                  <%!-- Timing Quote: the meeting's own words about when this
-                  is due, set beneath the chip row that carries the due date so
-                  the resolution is checkable at a glance ("20 Jul 2026" next
-                  to "end of next week") and misattribution is visible without
-                  reopening the Transcript. It stands alone when no date could
-                  be resolved — urgency the meeting voiced must not vanish
-                  between the meeting and the assignee's board. --%>
-                  <p
-                    :if={action_point.timing_quote}
-                    id={"#{dom_id}-timing-quote"}
-                    data-role="timing-quote"
-                    class="mt-1.5 flex items-start gap-1.5 text-xs text-base-content/65"
-                  >
-                    <.icon
-                      name="hero-chat-bubble-bottom-center-text-micro"
-                      class="mt-px size-3.5 shrink-0"
+                      <.icon name="hero-arrow-uturn-left-micro" class="size-3.5" /> Accept
+                    </button>
+                    <a
+                      :if={action_point.sink_issue_id}
+                      data-role="sink-issue"
+                      href={action_point.sink_issue_url}
+                      target="_blank"
+                      rel="noopener"
+                      class="inline-flex items-center gap-1 rounded-field border border-success/40 bg-success/10 px-2 py-0.5 text-xs font-medium text-success"
+                    >
+                      <.icon name="hero-check-micro" class="size-3" />
+                      {action_point.sink_issue_identifier}
+                    </a>
+                    <.due_date_chip
+                      action_point={action_point}
+                      flagged={flag_past_due?(action_point, @today)}
                     />
-                    <%!-- Clamped, never truncated in the data: a long quote is
-                    still verbatim, but it must not become the biggest thing on
-                    a card the user is scanning. --%>
-                    <span class="line-clamp-2 italic">“{action_point.timing_quote}”</span>
-                  </p>
-                <% end %>
-              </li>
-            </ul>
+                  </span>
+                </li>
+              </ul>
+            </div>
 
             <div
               :if={
@@ -654,77 +486,269 @@ defmodule ActionPointsWeb.ReviewLive do
     """
   end
 
-  # One Action Point's due date — the whole of it, present or absent, flagged
-  # or not. A resolved date that has already passed is shown and marked, never
-  # cleared and never blocking: our guess about the deadline is the one place
-  # where being wrong reaches out and touches colleagues who never used this
-  # product, since an overdue task fires whatever the workspace notifies on.
-  # The user sees the flag and decides — keep it, edit it, or clear it.
+  # The step: one Action Point owning the screen (ADR-0010). Title, then two
+  # columns of comparable weight — what the meeting said on the left, the
+  # issue we would create on the right — and the decision beneath them.
+  #
+  # The columns are a claim enforced by what can be touched: nothing in the
+  # left one is interactive, because it is a record of the Transcript and a
+  # record cannot be wrong. Everything the user can change lives on the right,
+  # which is the thing being created.
+  #
+  # On a narrow viewport they stack, left above right: the meeting is read
+  # first and the issue second, which is the same argument the columns make
+  # left to right.
   attr :action_point, :map, required: true
-  attr :today, Date, required: true, doc: "the visitor's own today, read fresh at Review"
+  attr :sink_users, :list, required: true
+  attr :sink_live?, :boolean, required: true
+  attr :decided_count, :integer, required: true
+  attr :action_point_count, :integer, required: true
+  attr :today, Date, required: true
 
-  defp due_date_field(assigns) do
-    assigns = assign(assigns, :flag?, flag_past_due?(assigns.action_point, assigns.today))
+  defp step(assigns) do
+    # A pushed Action Point is a record of something that exists: its controls
+    # freeze, and only the chips saying what was created remain.
+    assigns = assign(assigns, :curatable?, is_nil(assigns.action_point.sink_issue_id))
 
     ~H"""
-    <%= cond do %>
-      <% @flag? -> %>
-        <.chip role="due-date" icon="hero-exclamation-triangle-micro" flagged>
-          {Calendar.strftime(@action_point.due_date, "%-d %b %Y")}
-          <span class="font-medium">· already passed</span>
-        </.chip>
-      <% @action_point.due_date -> %>
-        <.chip role="due-date" icon="hero-calendar-micro">
-          {Calendar.strftime(@action_point.due_date, "%-d %b %Y")}
-        </.chip>
-      <% true -> %>
-        <%!-- A missing due date is stated, not left blank: the model heard no
-        date, which is different from nobody having looked. --%>
-        <.chip role="no-due-date" icon="hero-calendar-micro" empty>No due date</.chip>
-    <% end %>
+    <div
+      id={"step-#{@action_point.id}"}
+      data-role="step"
+      data-status={@action_point.status}
+      data-parent-id={@action_point.parent_id}
+      class="rounded-box border border-base-300/60 bg-base-200 p-5 sm:p-6"
+    >
+      <p class="text-[11px] tracking-[0.08em] text-base-content/65 uppercase">
+        {@decided_count} of {@action_point_count} decided
+      </p>
+      <h2 data-role="step-title" class="mt-1 text-xl leading-snug font-semibold">
+        {@action_point.title}
+      </h2>
+
+      <div class="mt-5 grid gap-6 md:grid-cols-2">
+        <.meeting_column action_point={@action_point} />
+        <.issue_column
+          action_point={@action_point}
+          sink_users={@sink_users}
+          sink_live?={@sink_live?}
+          curatable?={@curatable?}
+          today={@today}
+        />
+      </div>
+
+      <%!-- Accept and Reject are the only ways forward, and Accept commits
+      what is on the screen: the pills wrote their changes when they were
+      used, so there is nothing left here to save separately. --%>
+      <div
+        :if={@curatable?}
+        data-role="step-decision"
+        class="mt-6 flex flex-wrap items-center gap-2 border-t border-base-300/60 pt-4"
+      >
+        <button
+          id={"step-#{@action_point.id}-accept"}
+          data-role="accept"
+          phx-click="accept"
+          phx-value-id={@action_point.id}
+          class="btn btn-primary btn-sm"
+        >
+          <.icon name="hero-check-micro" class="size-4" /> Accept
+        </button>
+        <button
+          id={"step-#{@action_point.id}-reject"}
+          data-role="reject"
+          phx-click="reject"
+          phx-value-id={@action_point.id}
+          class="btn btn-ghost btn-sm"
+        >
+          <.icon name="hero-x-mark-micro" class="size-4" /> Reject
+        </button>
+        <span class="ml-auto text-xs text-base-content/65">
+          Accepting creates this exactly as the right-hand column reads.
+        </span>
+      </div>
+      <div
+        :if={not @curatable?}
+        data-role="step-decision"
+        class="mt-6 flex flex-wrap items-center gap-2 border-t border-base-300/60 pt-4"
+      >
+        <a
+          data-role="sink-issue"
+          href={@action_point.sink_issue_url}
+          target="_blank"
+          rel="noopener"
+          class="inline-flex items-center gap-1 rounded-field border border-success/40 bg-success/10 px-2 py-0.5 text-xs font-medium text-success"
+        >
+          <.icon name="hero-check-micro" class="size-3" />
+          {@action_point.sink_issue_identifier}
+        </a>
+        <span class="text-xs text-base-content/65">
+          Already created in Linear — this step is a record of what was sent.
+        </span>
+      </div>
+    </div>
     """
   end
 
-  # Whether one Action Point's due date is worth flagging. One predicate for
-  # the chip and the notice above it, so the screen can never warn in one
-  # place and stay quiet in the other. Only what a Push would actually act on
-  # is flagged: a rejected Action Point creates nothing, and a pushed one is
-  # past being warned about — its task is already in the sink.
-  defp flag_past_due?(action_point, today) do
-    action_point.status == :accepted and is_nil(action_point.sink_issue_id) and
-      past_due?(action_point.due_date, today)
+  # The left column: what the meeting said, verbatim, and nothing that can be
+  # touched. Every row is stated even when it is empty — "nobody was named" is
+  # a fact about the meeting, and leaving it blank would read as nobody having
+  # looked.
+  attr :action_point, :map, required: true
+
+  defp meeting_column(assigns) do
+    ~H"""
+    <section data-role="meeting-column" class="space-y-4">
+      <h3 class="text-[11px] font-medium tracking-[0.08em] text-base-content/65 uppercase">
+        The meeting said
+      </h3>
+
+      <div>
+        <p class="text-xs text-base-content/65">Who</p>
+        <p data-role="named-person" class="mt-0.5 font-medium">
+          {@action_point.assignee_guess || "Nobody was named"}
+        </p>
+      </div>
+
+      <div :if={@action_point.quotes != []} data-role="grounding-quotes">
+        <p class="text-xs text-base-content/65">In their words</p>
+        <blockquote
+          :for={quote <- @action_point.quotes}
+          data-role="grounding-quote"
+          class="mt-2 border-l-2 border-base-300 pl-3 text-base-content/70 italic"
+        >
+          {quote}
+        </blockquote>
+      </div>
+
+      <div>
+        <p class="text-xs text-base-content/65">When</p>
+        <p
+          :if={@action_point.timing_quote}
+          data-role="timing-quote"
+          class="mt-0.5 text-base-content/70 italic"
+        >
+          “{@action_point.timing_quote}”
+        </p>
+        <p :if={is_nil(@action_point.timing_quote)} class="mt-0.5 text-base-content/65">
+          Nothing was said about when
+        </p>
+      </div>
+    </section>
+    """
   end
 
-  # A resolved due date is past when it falls before the visitor's today —
-  # today itself is not late. Compared against today and never against the
-  # Meeting Date: a deadline in the past relative to a three-week-old meeting
-  # is exactly what we would expect, and is not the signal worth flagging.
-  defp past_due?(nil, _today), do: false
-  defp past_due?(%Date{} = due_date, %Date{} = today), do: Date.before?(due_date, today)
+  # The right column: the issue we would create, and the only things on the
+  # screen that can be changed. The description is the one Push composes, not
+  # the model's bare prose — Review previewed a document that did not exist
+  # until ADR-0010 (issue #106).
+  attr :action_point, :map, required: true
+  attr :sink_users, :list, required: true
+  attr :sink_live?, :boolean, required: true
+  attr :curatable?, :boolean, required: true
+  attr :today, Date, required: true
 
-  # An assignee is two facts and both stay on screen (CONTEXT.md, ADR-0010).
+  defp issue_column(assigns) do
+    ~H"""
+    <section data-role="issue-column" class="space-y-3">
+      <h3 class="text-[11px] font-medium tracking-[0.08em] text-base-content/65 uppercase">
+        What we'll create
+      </h3>
+
+      <p data-role="issue-title" class="font-medium">{@action_point.title}</p>
+
+      <%!-- Byte for byte the description Push sends: the parts concatenate to
+      `Sinks.compose_description/1` and the removal control is an icon with no
+      text of its own, so nothing this renders adds a character to it.
+
+      `phx-no-format` is load-bearing rather than cosmetic — the formatter
+      indents element bodies, and an indent inside this block is a character
+      the Push never sends. --%>
+      <div
+        data-role="payload-description"
+        class="rounded-box border border-base-300/60 bg-base-100 p-3 text-sm whitespace-pre-wrap text-base-content/80"
+        phx-no-format
+      ><span :for={part <- Sinks.description_parts(@action_point)}>{part.text}<button
+        :if={part.quote_index && @curatable?}
+        id={"quote-#{@action_point.id}-#{part.quote_index}-remove"}
+        data-role="remove-quote"
+        phx-click="remove_quote"
+        phx-value-id={@action_point.id}
+        phx-value-index={part.quote_index}
+        class="ml-1 inline-grid translate-y-px place-items-center rounded-[3px] p-0.5 align-middle hover:bg-base-300"
+        title="Remove this quote"
+        aria-label={"Remove quote #{part.quote_index + 1}"}
+      ><.icon name="hero-x-mark-micro" class="size-3" /></button></span></div>
+
+      <div class="flex flex-wrap items-center gap-1.5">
+        <.sink_member_pill
+          action_point={@action_point}
+          sink_users={@sink_users}
+          pickable={@sink_live? and @curatable?}
+        />
+        <.due_date_pill action_point={@action_point} today={@today} pickable={@curatable?} />
+        <%!-- Blockers: the ordering the meeting stated, and by now a statement
+        about a decision already made, since the walk decides a Blocker before
+        the Action Point it blocks. Removable until the relation is real in the
+        Task Sink, never addable here (ADR-0009). --%>
+        <span
+          :for={blocker <- @action_point.blockers}
+          data-role="blocker"
+          class="inline-flex items-center gap-1 rounded-field border border-base-300 px-2 py-0.5 text-xs text-base-content/70"
+        >
+          <.icon name="hero-hand-raised-micro" class="size-3 text-base-content/65" /> Blocked by:
+          <span class="max-w-[14rem] truncate font-medium">{blocker.blocked_by.title}</span>
+          <button
+            :if={is_nil(blocker.sink_relation_id)}
+            id={"blocker-#{blocker.id}-remove"}
+            phx-click="remove_blocker"
+            phx-value-id={blocker.id}
+            class="-mr-0.5 grid place-items-center rounded-[3px] p-0.5 hover:bg-base-300"
+            title="Remove this relation"
+            aria-label="Remove this relation"
+          >
+            <.icon name="hero-x-mark-micro" class="size-3" />
+          </button>
+        </span>
+        <%!-- Undoing a nesting the Extraction proposed, which ADR-0009 counts
+        as correcting rather than authoring. Its inverse is deliberately
+        absent. --%>
+        <button
+          :if={@action_point.parent_id && @curatable?}
+          id={"step-#{@action_point.id}-promote"}
+          data-role="promote"
+          phx-click="promote"
+          phx-value-id={@action_point.id}
+          class="btn btn-ghost btn-xs"
+          title="Promote to top level"
+        >
+          <.icon name="hero-arrow-up-left-micro" class="size-3.5" /> Promote
+        </button>
+      </div>
+    </section>
+    """
+  end
+
+  # The Sink Member: the only half of an assignee that can be wrong, so the
+  # only half the user can change. Matched shows the name and handle; unmatched
+  # is dashed and says so. Nothing is ever guessed here — an ambiguous Named
+  # Person reaches Review resolved to nobody, never to a plausible Dan.
   #
-  # The Named Person — what the meeting said — is rendered first and on every
-  # branch, because it is a record and cannot be wrong. It is rendered beside
-  # the picker most of all: the picker asks "who is this person in your
-  # workspace?", and dropping the name is dropping the question.
+  # The member list stands open beside the pill rather than behind a
+  # disclosure. A suggestion the reader never opened is a suggestion they never
+  # saw, and ADR-0007's whole claim is that nobody is assigned in a colleague's
+  # workspace without the pick having been on screen.
   #
-  # The Sink Member — the only part that can be wrong — is a live picker once
-  # the sink is connected and reachable and the Action Point isn't pushed yet,
-  # otherwise a static chip: the resolved member if Review settled one,
-  # "Unassigned" if it settled on nobody, and nothing at all if Review never
-  # got the chance (no connection, or a degraded fetch). Nothing is guessed
-  # silently: an ambiguous or unmatched Named Person reads as "Unassigned"
-  # once resolved, never as the meeting's name pretending to be a real pick.
+  # Three states, and the third is not the second: the picker while the sink is
+  # live, a static chip when Review resolved something and cannot any more, and
+  # nothing at all when Review never got the chance — no connection, or a member
+  # list that could not be reached. "Nobody matched" is a claim about the
+  # workspace, and we do not make it about a workspace we never read.
   attr :action_point, :map, required: true
   attr :sink_users, :list, required: true
   attr :pickable, :boolean, required: true
 
-  defp assignee_field(assigns) do
+  defp sink_member_pill(assigns) do
     ~H"""
-    <.chip :if={@action_point.assignee_guess} role="named-person" icon="hero-user-micro">
-      {@action_point.assignee_guess}
-    </.chip>
     <%= cond do %>
       <% @pickable -> %>
         <%!-- phx-value-id lives on the form, not the select: LiveView only
@@ -736,6 +760,7 @@ defmodule ActionPointsWeb.ReviewLive do
           phx-value-id={@action_point.id}
           class="inline-flex items-center gap-1.5"
         >
+          <.sink_member_chip action_point={@action_point} />
           <select
             id={"action-point-#{@action_point.id}-assignee"}
             name="sink_user_id"
@@ -761,16 +786,129 @@ defmodule ActionPointsWeb.ReviewLive do
             Suggested
           </span>
         </form>
-      <% @action_point.assignee_resolution && @action_point.sink_member_id -> %>
-        <.chip role="sink-member" icon="hero-arrow-right-micro">
-          {sink_member_label(@action_point)}
-        </.chip>
       <% @action_point.assignee_resolution -> %>
-        <.chip role="sink-member" icon="hero-arrow-right-micro" empty>Unassigned</.chip>
+        <.sink_member_chip action_point={@action_point} />
       <% true -> %>
     <% end %>
     """
   end
+
+  attr :action_point, :map, required: true
+
+  defp sink_member_chip(assigns) do
+    ~H"""
+    <%= if @action_point.sink_member_id do %>
+      <.chip role="sink-member" icon="hero-user-micro">
+        {sink_member_label(@action_point)}
+      </.chip>
+    <% else %>
+      <.chip role="sink-member" icon="hero-user-micro" empty>Nobody matched</.chip>
+    <% end %>
+    """
+  end
+
+  # One Action Point's due date — the whole of it, present or absent, flagged
+  # or not. A resolved date that has already passed is shown and marked, never
+  # cleared and never blocking: our guess about the deadline is the one place
+  # where being wrong reaches out and touches colleagues who never used this
+  # product, since an overdue task fires whatever the workspace notifies on.
+  # The user sees the flag and decides — keep it, change it, or clear it.
+  #
+  # Change and clear stand open, for the same reason the member list does: a
+  # control behind a disclosure is a control the reader did not know they had.
+  # Clear especially — Edit used to be the only way to take a date the meeting
+  # got wrong back off, and deleting Edit must not take that with it (#106).
+  attr :action_point, :map, required: true
+  attr :today, Date, required: true, doc: "the visitor's own today, read fresh at Review"
+  attr :pickable, :boolean, required: true
+
+  defp due_date_pill(assigns) do
+    ~H"""
+    <%= cond do %>
+      <% @pickable -> %>
+        <span class="inline-flex flex-wrap items-center gap-1.5">
+          <.due_date_chip
+            action_point={@action_point}
+            flagged={pending_past_due?(@action_point, @today)}
+          />
+          <form
+            id={"action-point-#{@action_point.id}-due-date-form"}
+            phx-change="set_due_date"
+            phx-value-id={@action_point.id}
+          >
+            <input
+              type="date"
+              name="due_date"
+              data-role="due-date-input"
+              value={@action_point.due_date && Date.to_iso8601(@action_point.due_date)}
+              class="input input-xs w-auto"
+            />
+          </form>
+          <button
+            :if={@action_point.due_date}
+            id={"action-point-#{@action_point.id}-due-date-clear"}
+            data-role="clear-due-date"
+            phx-click="clear_due_date"
+            phx-value-id={@action_point.id}
+            class="btn btn-ghost btn-xs"
+          >
+            Clear
+          </button>
+        </span>
+      <% true -> %>
+        <.due_date_chip action_point={@action_point} flagged={flag_past_due?(@action_point, @today)} />
+    <% end %>
+    """
+  end
+
+  attr :action_point, :map, required: true
+  attr :flagged, :boolean, required: true
+
+  defp due_date_chip(assigns) do
+    ~H"""
+    <%= cond do %>
+      <% @flagged -> %>
+        <.chip role="due-date" icon="hero-exclamation-triangle-micro" flagged>
+          {Calendar.strftime(@action_point.due_date, "%-d %b %Y")}
+          <span class="font-medium">· already passed</span>
+        </.chip>
+      <% @action_point.due_date -> %>
+        <.chip role="due-date" icon="hero-calendar-micro">
+          {Calendar.strftime(@action_point.due_date, "%-d %b %Y")}
+        </.chip>
+      <% true -> %>
+        <%!-- A missing due date is stated, not left blank: the model heard no
+        date, which is different from nobody having looked. --%>
+        <.chip role="no-due-date" icon="hero-calendar-micro" empty>No due date</.chip>
+    <% end %>
+    """
+  end
+
+  # The flag on a step, where the date is still under the reader's hand.
+  # Deliberately wider than `flag_past_due?/2`: the set-level notice warns
+  # about what a Push would create overdue and so counts only what is
+  # accepted, but a signal that waited for the decision would arrive after it.
+  defp pending_past_due?(action_point, today) do
+    action_point.status != :rejected and is_nil(action_point.sink_issue_id) and
+      past_due?(action_point.due_date, today)
+  end
+
+  # Whether one Action Point's due date is worth warning the whole Review
+  # about. One predicate for the notice and the rows beneath it, so the screen
+  # can never warn in one place and stay quiet in the other. Only what a Push
+  # would actually act on: a rejected Action Point creates nothing, and a
+  # pushed one is past being warned about — its task is already in the sink.
+  defp flag_past_due?(action_point, today) do
+    action_point.status == :accepted and is_nil(action_point.sink_issue_id) and
+      past_due?(action_point.due_date, today)
+  end
+
+  # A resolved due date is past when it falls before the visitor's today —
+  # today itself is not late. Compared against today and never against the
+  # Meeting Date: a deadline in the past relative to a three-week-old meeting
+  # is exactly what we would expect, and is not the signal worth flagging.
+  defp past_due?(nil, _today), do: false
+  defp past_due?(%Date{} = due_date, %Date{} = today), do: Date.before?(due_date, today)
 
   # Name and handle, the same shape the picker's options use, so the chip a
   # pushed Action Point falls back to reads as the pick that was made. The
@@ -784,27 +922,6 @@ defmodule ActionPointsWeb.ReviewLive do
 
   defp sink_member_label(action_point) do
     "#{action_point.sink_member_name} (@#{action_point.sink_member_handle})"
-  end
-
-  defp editing?(nil, _action_point), do: false
-  defp editing?(editing, action_point), do: editing.id == action_point.id
-
-  # Reading, rejected, and editing are three visibly different cards: a rejected
-  # one drops out of the surface entirely, an editing one is lifted onto it.
-  defp card_class(editing, action_point) do
-    cond do
-      # A tinted ring rather than a drop shadow: the tokens set --depth: 0, so
-      # surfaces here separate by value and not by elevation, and a black
-      # shadow tuned for the dark canvas would read as grime on the light one.
-      editing?(editing, action_point) ->
-        "border-primary bg-base-300 ring-1 ring-primary/30"
-
-      action_point.status == :rejected ->
-        "border-dashed border-base-300 bg-transparent"
-
-      true ->
-        "border-base-300/60 bg-base-200 hover:border-base-300"
-    end
   end
 
   @impl true
@@ -839,54 +956,22 @@ defmodule ActionPointsWeb.ReviewLive do
   end
 
   def handle_event("remove_quote", %{"id" => id, "index" => index}, socket) do
-    action_point =
-      id
-      |> Meetings.get_action_point!(socket.assigns.extraction.session_token)
-      |> Meetings.remove_action_point_quote(String.to_integer(index))
+    id
+    |> Meetings.get_action_point!(socket.assigns.extraction.session_token)
+    |> Meetings.remove_action_point_quote(String.to_integer(index))
 
-    {:noreply, refresh_action_point(socket, action_point)}
+    {:noreply, refresh(socket)}
   end
 
-  def handle_event("edit", %{"id" => id}, socket) do
-    action_point = Meetings.get_action_point!(id, socket.assigns.extraction.session_token)
-
-    {:noreply,
-     socket
-     |> close_editor()
-     |> assign(:editing, action_point)
-     |> assign(:edit_form, to_form(Meetings.change_action_point(action_point)))
-     |> stream_insert(:action_points, action_point)}
+  # The due date, changed and cleared without Edit. Both write immediately:
+  # Accept commits what is on the screen, so there is no state in which a pill
+  # has been used but not saved (ADR-0010).
+  def handle_event("set_due_date", %{"id" => id, "due_date" => due_date}, socket) do
+    {:noreply, curate_due_date(socket, id, due_date)}
   end
 
-  def handle_event("cancel_edit", _params, socket) do
-    {:noreply, close_editor(socket)}
-  end
-
-  def handle_event("save_edit", %{"action_point" => params}, socket) do
-    case socket.assigns.editing do
-      # A stray submit after the editor closed (e.g. a double click) is a no-op.
-      nil ->
-        {:noreply, socket}
-
-      editing ->
-        case Meetings.update_action_point(editing, params) do
-          {:ok, _action_point} ->
-            # A retitle changes the "Blocked by" chips naming this Action Point
-            # on other cards — refresh them all.
-            {:noreply,
-             socket
-             |> assign(:editing, nil)
-             |> refresh_all_action_points()}
-
-          {:error, changeset} ->
-            # Re-insert the card — stream items only re-render when
-            # re-inserted, and the form must show its errors.
-            {:noreply,
-             socket
-             |> assign(:edit_form, to_form(changeset))
-             |> stream_insert(:action_points, editing)}
-        end
-    end
+  def handle_event("clear_due_date", %{"id" => id}, socket) do
+    {:noreply, curate_due_date(socket, id, nil)}
   end
 
   def handle_event("remove_blocker", %{"id" => id}, socket) do
@@ -894,7 +979,7 @@ defmodule ActionPointsWeb.ReviewLive do
     |> Meetings.get_blocker!(socket.assigns.extraction.session_token)
     |> Meetings.remove_action_point_blocker()
 
-    {:noreply, refresh_all_action_points(socket)}
+    {:noreply, refresh(socket)}
   end
 
   # Undoing a nesting the model proposed, which ADR-0009 counts as correcting
@@ -905,9 +990,9 @@ defmodule ActionPointsWeb.ReviewLive do
 
     case Meetings.promote_action_point(action_point) do
       {:ok, _promoted} ->
-        {:noreply, assign_extraction(socket, refetch_extraction(socket))}
+        {:noreply, refresh(socket)}
 
-      # The card offered no such control — a stale or forged event is a no-op.
+      # The step offered no such control — a stale or forged event is a no-op.
       {:error, _reason} ->
         {:noreply, socket}
     end
@@ -1050,40 +1135,38 @@ defmodule ActionPointsWeb.ReviewLive do
     end
   end
 
-  defp close_editor(socket) do
-    case socket.assigns.editing do
-      nil ->
-        socket
-
-      action_point ->
-        socket
-        |> assign(:editing, nil)
-        # Re-insert so the card re-renders back in display mode.
-        |> stream_insert(:action_points, action_point)
-    end
-  end
-
-  # A status change re-renders the whole Review rather than patching one
-  # card: rejecting a parent promotes its Subtasks — a rule, not an option —
-  # so sibling cards move with it.
+  # Deciding this step moves the walk on, and the move is a consequence of the
+  # write rather than a step counter: a rejection also removes this Action
+  # Point's Blockers and promotes its Subtasks, so the order itself can change
+  # underneath the decision that caused it.
   defp set_status(socket, id, status) do
     id
     |> Meetings.get_action_point!(socket.assigns.extraction.session_token)
     |> Meetings.set_action_point_status(status)
 
-    # A rejection also removed this Action Point's Blockers and promoted its
-    # Subtasks, so other cards' chips and nesting changed too — refresh the
-    # whole list.
-    refresh_all_action_points(socket)
+    refresh(socket)
   end
 
   defp set_assignee(socket, id, sink_user) do
-    action_point =
-      id
-      |> Meetings.get_action_point!(socket.assigns.extraction.session_token)
-      |> Meetings.set_action_point_assignee(sink_user)
+    id
+    |> Meetings.get_action_point!(socket.assigns.extraction.session_token)
+    |> Meetings.set_action_point_assignee(sink_user)
 
-    refresh_action_point(socket, action_point)
+    refresh(socket)
+  end
+
+  # A due date the meeting got wrong: changed to another day, or taken off
+  # entirely. Nothing else on the Action Point is castable here, so a crafted
+  # submit carrying a title or a Named Person changes neither.
+  defp curate_due_date(socket, id, due_date) do
+    action_point = Meetings.get_action_point!(id, socket.assigns.extraction.session_token)
+
+    case Meetings.update_action_point(action_point, %{"due_date" => due_date}) do
+      {:ok, _updated} -> refresh(socket)
+      # An unparseable date leaves the one that was there — the pill offers a
+      # date input, so only a forged event gets here.
+      {:error, _changeset} -> socket
+    end
   end
 
   # Resolves every unresolved Action Point's assignee guess against the
@@ -1128,29 +1211,16 @@ defmodule ActionPointsWeb.ReviewLive do
     |> assign_extraction(extraction)
   end
 
-  # Patches one card in place and recounts — for the curation that only ever
-  # changes its own card (quotes, assignee picks). Anything that can change
-  # other cards' Blocker chips goes through refresh_all_action_points/1.
-  defp refresh_action_point(socket, action_point) do
-    socket
-    |> assign(:pushable_count, Meetings.count_pushable_action_points(action_point.extraction_id))
-    |> assign(:rejected_count, Meetings.count_rejected_action_points(action_point.extraction_id))
-    |> stream_insert(:action_points, action_point)
-  end
-
-  # Re-renders every card and recounts: a rejection removes Blockers on other
-  # cards, a retitle renames the chips citing it. Cards are re-inserted, not
-  # reset, so transient DOM state (an open quotes disclosure) survives.
-  defp refresh_all_action_points(socket) do
-    action_points = refetch_extraction(socket).action_points
-
-    socket
-    |> assign_action_point_aggregates(action_points)
-    |> then(
-      &Enum.reduce(action_points, &1, fn ap, socket ->
-        stream_insert(socket, :action_points, ap)
-      end)
-    )
+  # Re-reads the Action Points and re-derives everything the screen is: the
+  # step is a query, so any curation that could move the walk — a decision, a
+  # promotion, a removed Blocker — needs nothing more than this.
+  #
+  # Deliberately not `assign_extraction/2`: a partial Push leaves a report of
+  # which tasks exist in Linear and which do not, and that report is the only
+  # place the split is stated. Curating the rest of the Review must not wipe
+  # it, and must not tell the screen that a Push still running has finished.
+  defp refresh(socket) do
+    assign_action_point_aggregates(socket, refetch_extraction(socket).action_points)
   end
 
   defp assign_extraction(socket, extraction) do
@@ -1158,13 +1228,10 @@ defmodule ActionPointsWeb.ReviewLive do
 
     socket
     |> assign(:extraction, %{extraction | action_points: []})
-    |> assign(:editing, nil)
-    |> assign(:edit_form, nil)
     |> assign(:pushing?, false)
     |> assign(:push_failure, nil)
     |> assign(:relations_supported?, Sinks.supports_relations?())
     |> assign_action_point_aggregates(action_points)
-    |> stream(:action_points, Meetings.order_for_review(action_points), reset: true)
   end
 
   defp assign_action_point_aggregates(socket, action_points) do
@@ -1181,9 +1248,21 @@ defmodule ActionPointsWeb.ReviewLive do
     |> assign(:pushed_action_points, Enum.filter(action_points, & &1.sink_issue_id))
     |> assign(:past_due_count, past_due_count(action_points, socket.assigns.today))
     |> assign(:subtask_count, Enum.count(action_points, & &1.parent_id))
+    |> assign_walk(action_points)
   end
 
-  # How many cards are carrying the flag — what decides whether the notice
+  # Where the walk stands, derived rather than remembered (ADR-0010): the step
+  # is the first Action Point in dependency order that has not been decided,
+  # and the rest — behind it, in the same order — is what has been.
+  defp assign_walk(socket, action_points) do
+    ordered = DependencyOrder.sort(action_points)
+
+    socket
+    |> assign(:step, Enum.find(ordered, &(&1.status == :undecided)))
+    |> assign(:decided, Enum.reject(ordered, &(&1.status == :undecided)))
+  end
+
+  # How many Action Points are carrying the flag — what decides whether the notice
   # explaining it is worth showing at all.
   defp past_due_count(action_points, today) do
     Enum.count(action_points, &flag_past_due?(&1, today))

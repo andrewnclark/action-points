@@ -29,7 +29,7 @@ defmodule ActionPointsWeb.ReviewSubtasksTest do
 
   # Creates a succeeded Extraction owned by the conn's anonymous session and
   # opens its Review screen.
-  defp open_review(conn, result \\ @nested_result) do
+  defp open_review(conn, result \\ @nested_result, opts \\ []) do
     stub_extractor(result)
 
     conn = get(conn, ~p"/")
@@ -40,92 +40,117 @@ defmodule ActionPointsWeb.ReviewSubtasksTest do
 
     Meetings.run_extraction(extraction)
     extraction = Meetings.get_extraction!(extraction.id, session_token)
+    action_points = extraction.action_points
 
-    # The Review these tests drive is one that has been walked: since ADR-0010
-    # nothing arrives accepted, and this screen is about what follows.
-    action_points = accept_action_points(extraction.action_points)
+    case Keyword.get(opts, :walk_to) do
+      nil -> :ok
+      index -> walk_to(extraction.id, Enum.at(action_points, index))
+    end
 
     path = ~p"/review/#{extraction}"
     {:ok, review, _html} = live(conn, path)
-    %{review: review, conn: conn, path: path, action_points: action_points}
+
+    %{
+      review: review,
+      conn: conn,
+      path: path,
+      extraction: extraction,
+      action_points: action_points
+    }
   end
 
-  defp dom_id(action_point), do: "action_points-#{action_point.id}"
+  defp step_id(action_point), do: "step-#{action_point.id}"
 
-  # The card's index in the rendered list — how the tests assert the
-  # indented list's order without coupling to markup.
-  defp rendered_index(review, action_point) do
-    {index, _length} = :binary.match(render(review), ~s(id="#{dom_id(action_point)}"))
-    index
+  # The titles the walk visits, in order — how these tests assert the ordering
+  # rule without coupling to markup.
+  defp walk_order(extraction) do
+    extraction.id
+    |> Meetings.list_action_points_in_dependency_order()
+    |> Enum.map(& &1.title)
   end
 
-  test "Subtasks render indented beneath their parent, not in flat position order", %{
-    conn: conn
-  } do
-    %{review: review, action_points: [parent, copy, flow, venue]} = open_review(conn)
+  # ADR-0010: children before parents, because rejecting a parent promotes its
+  # survivors irreversibly and that decision needs to know which survived.
+  test "the walk decides Subtasks before their parent", %{conn: conn} do
+    %{review: review, extraction: extraction, action_points: [parent, copy, _flow, _venue]} =
+      open_review(conn)
 
-    assert has_element?(review, "##{dom_id(copy)}[data-parent-id='#{parent.id}']")
-    assert has_element?(review, "##{dom_id(flow)}[data-parent-id='#{parent.id}']")
-    refute has_element?(review, "##{dom_id(parent)}[data-parent-id]")
-    refute has_element?(review, "##{dom_id(venue)}[data-parent-id]")
+    assert walk_order(extraction) == [
+             "Rewrite the onboarding copy",
+             "Build the new flow",
+             "Revamp onboarding",
+             "Book the offsite venue"
+           ]
 
-    # Parent first, its Subtasks immediately beneath, the loose one last.
-    assert rendered_index(review, parent) < rendered_index(review, copy)
-    assert rendered_index(review, copy) < rendered_index(review, flow)
-    assert rendered_index(review, flow) < rendered_index(review, venue)
+    assert has_element?(review, "##{step_id(copy)}")
+    refute has_element?(review, "##{step_id(parent)}")
   end
 
-  test "a Subtask listed before its parent still renders beneath it", %{conn: conn} do
-    %{review: review, action_points: [child, parent]} =
+  test "a Subtask listed before its parent is still decided first", %{conn: conn} do
+    %{extraction: extraction} =
       open_review(
         conn,
         {:ok, [%{title: "Rewrite the onboarding copy", parent: 2}, %{title: "Revamp onboarding"}]}
       )
 
-    assert rendered_index(review, parent) < rendered_index(review, child)
+    assert walk_order(extraction) == ["Rewrite the onboarding copy", "Revamp onboarding"]
+  end
+
+  test "the step names the parent an Action Point belongs to", %{conn: conn} do
+    %{review: review, action_points: [parent, copy, _flow, _venue]} = open_review(conn)
+
+    assert has_element?(review, "##{step_id(copy)}[data-parent-id='#{parent.id}']")
   end
 
   test "promoting a Subtask lifts it to top level with one click", %{conn: conn} do
     %{review: review, action_points: [_parent, copy, _flow, _venue]} = open_review(conn)
 
-    review |> element("##{dom_id(copy)}-promote") |> render_click()
+    review |> element("[data-role=step] [data-role=promote]") |> render_click()
 
-    refute has_element?(review, "##{dom_id(copy)}[data-parent-id]")
-    assert has_element?(review, "##{dom_id(copy)}")
+    refute has_element?(review, "##{step_id(copy)}[data-parent-id]")
+    assert has_element?(review, "##{step_id(copy)}")
   end
 
   # ADR-0009: nesting is something the meeting did. Review can undo one the
   # model proposed (Promote), never draw one the meeting never drew.
-  test "no card offers a control for nesting an Action Point", %{conn: conn} do
-    %{review: review, action_points: action_points} = open_review(conn)
+  test "the step offers no control for nesting an Action Point", %{conn: conn} do
+    %{review: review, action_points: [_parent, copy, _flow, _venue]} = open_review(conn)
 
-    for action_point <- action_points do
-      refute has_element?(review, "#action-point-#{action_point.id}-parent-form")
-      refute has_element?(review, "##{dom_id(action_point)} [data-role=parent-picker]")
-    end
+    refute has_element?(review, "#action-point-#{copy.id}-parent-form")
+    refute has_element?(review, "##{step_id(copy)} [data-role=parent-picker]")
   end
 
   test "rejecting a parent promotes its Subtasks in the Review", %{conn: conn} do
-    %{review: review, action_points: [parent, copy, flow, _venue]} = open_review(conn)
+    %{review: review, extraction: extraction, action_points: [parent, copy, flow, _venue]} =
+      open_review(conn, @nested_result, walk_to: 0)
 
-    review |> element("##{dom_id(parent)}-reject") |> render_click()
+    assert has_element?(review, "##{step_id(parent)}")
 
-    assert has_element?(review, "##{dom_id(parent)}[data-status=rejected]")
-    refute has_element?(review, "##{dom_id(copy)}[data-parent-id]")
-    refute has_element?(review, "##{dom_id(flow)}[data-parent-id]")
-    assert has_element?(review, "##{dom_id(copy)}[data-status=accepted]")
-    assert has_element?(review, "##{dom_id(flow)}[data-status=accepted]")
+    review |> element("[data-role=step] [data-role=reject]") |> render_click()
+
+    assert has_element?(review, "#review-toolbar", "1 rejected")
+    assert has_element?(review, "#review-toolbar", "2 accepted")
+
+    promoted =
+      extraction.id
+      |> Meetings.get_extraction!(extraction.session_token)
+      |> Map.fetch!(:action_points)
+      |> Enum.filter(&(&1.id in [copy.id, flow.id]))
+
+    assert Enum.all?(promoted, &is_nil(&1.parent_id))
+    assert Enum.all?(promoted, &(&1.status == :accepted))
   end
 
-  test "a top-level card offers nothing to promote", %{conn: conn} do
-    %{review: review, action_points: [parent, _copy, _flow, venue]} = open_review(conn)
+  test "a top-level Action Point offers nothing to promote", %{conn: conn} do
+    %{review: review, action_points: [_parent, _copy, _flow, venue]} =
+      open_review(conn, @nested_result, walk_to: 3)
 
-    refute has_element?(review, "##{dom_id(parent)}-promote")
-    refute has_element?(review, "##{dom_id(venue)}-promote")
+    assert has_element?(review, "##{step_id(venue)}")
+    refute has_element?(review, "[data-role=step] [data-role=promote]")
   end
 
   test "a pushed Subtask offers no Promote — its place in the sink already exists", %{conn: conn} do
-    %{conn: conn, path: path, action_points: [_parent, copy, flow, _venue]} = open_review(conn)
+    %{conn: conn, path: path, action_points: [_parent, copy, _flow, _venue]} = open_review(conn)
 
     Meetings.record_push!(copy, %{
       id: "issue-1",
@@ -135,17 +160,8 @@ defmodule ActionPointsWeb.ReviewSubtasksTest do
 
     {:ok, review, _html} = live(conn, path)
 
-    refute has_element?(review, "##{dom_id(copy)}-promote")
-    assert has_element?(review, "##{dom_id(flow)}-promote")
-  end
-
-  # The indent says it. A chip repeating it only cost the metadata row its
-  # alignment — see #93.
-  test "a Subtask carries no chip; its position is the only marker", %{conn: conn} do
-    %{review: review, action_points: [_parent, copy, _flow, _venue]} = open_review(conn)
-
-    assert has_element?(review, "##{dom_id(copy)}[data-parent-id]")
-    refute has_element?(review, "##{dom_id(copy)} [data-role=subtask]")
+    assert has_element?(review, "##{step_id(copy)}")
+    refute has_element?(review, "[data-role=step] [data-role=promote]")
   end
 
   describe "with a connected Task Sink" do

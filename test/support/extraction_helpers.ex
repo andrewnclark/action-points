@@ -74,4 +74,21 @@ defmodule ActionPoints.ExtractionHelpers do
   def accept_action_points(action_points) when is_list(action_points) do
     Enum.map(action_points, &ActionPoints.Meetings.set_action_point_status(&1, :accepted))
   end
+
+  @doc """
+  Walks a Review up to the Step showing `target`, by accepting everything
+  Dependency Order puts before it.
+
+  Review shows one Action Point at a time since ADR-0010, so a test about the
+  second thing the meeting said has to reach it the way a user does. It asks
+  `Meetings.list_action_points_in_dependency_order/1` where the target sits
+  rather than assuming position order, so a test whose Action Points carry
+  Blockers or nesting still walks to the right place.
+  """
+  def walk_to(extraction_id, %{id: target_id}) do
+    extraction_id
+    |> ActionPoints.Meetings.list_action_points_in_dependency_order()
+    |> Enum.take_while(&(&1.id != target_id))
+    |> accept_action_points()
+  end
 end

@@ -28,7 +28,16 @@ defmodule ActionPointsWeb.LandingPageTest do
 
     # No spinner on the way: the Review is finished when the visitor arrives.
     refute has_element?(review, "#extraction-progress")
-    assert has_element?(review, "#action-points li", "Finish the pricing table")
+    # The walk opens on the sample's first Action Point in Dependency Order —
+    # legal's answer, which the landing page waits on — not on the meeting's
+    # own first line.
+    assert has_element?(
+             review,
+             "[data-role=step]",
+             "Get legal's yes or no on the updated terms"
+           )
+
+    assert has_element?(review, "#review-toolbar", "8 not yet decided")
 
     # And it says what it is — the meeting is fiction, the screen is not.
     assert has_element?(review, "#sample-notice", "sample meeting")
@@ -77,7 +86,7 @@ defmodule ActionPointsWeb.LandingPageTest do
     {:ok, review, _html} = follow_redirect(result, conn)
 
     eventually(fn ->
-      assert has_element?(review, "#action-points li", "Send the Q3 report to finance")
+      assert has_element?(review, "[data-role=step]", "Send the Q3 report to finance")
     end)
   end
 
@@ -137,7 +146,7 @@ defmodule ActionPointsWeb.LandingPageTest do
     {:ok, review, _html} = follow_redirect(result, conn)
 
     eventually(fn ->
-      assert has_element?(review, "#action-points li", "Send the Q3 report to finance")
+      assert has_element?(review, "[data-role=step]", "Send the Q3 report to finance")
     end)
 
     # The same visitor comes back for a second run and is turned away.
