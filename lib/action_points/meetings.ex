@@ -14,6 +14,7 @@ defmodule ActionPoints.Meetings do
   alias ActionPoints.Billing
   alias ActionPoints.Meetings.ActionPoint
   alias ActionPoints.Meetings.Blocker
+  alias ActionPoints.Meetings.DependencyOrder
   alias ActionPoints.Meetings.Extraction
   alias ActionPoints.Meetings.GroundingQuote
   alias ActionPoints.Meetings.SampleMeeting
@@ -316,9 +317,10 @@ defmodule ActionPoints.Meetings do
         # they cascade-delete with the Action Points they relate.
         Repo.delete_all(from ap in ActionPoint, where: ap.extraction_id == ^extraction.id)
 
+        action_points = sanitize_parent_refs(action_points)
+
         inserted =
           action_points
-          |> sanitize_parent_refs()
           |> Enum.with_index(1)
           |> Enum.map(fn {attrs, position} ->
             parent = attrs.parent
@@ -444,13 +446,25 @@ defmodule ActionPoints.Meetings do
   end
 
   # The Extraction's proposed Blockers, persisted as rows between the Action
-  # Points just inserted. `Blocker.sanitise/1` has already made every surviving
+  # Points just inserted. `Blocker.sanitise/2` has already made every surviving
   # edge insertable — nonsense proposals are dropped, never a failed Extraction.
+  #
+  # The nesting the Extraction proposed is handed over with them, because the
+  # two kinds of relation share one graph: Review decides a Subtask before its
+  # parent and a Blocker before what it blocks (ADR-0010), so a Blocker running
+  # from a parent down to its own Subtask closes a loop just as surely as one
+  # between two siblings. Sanitising the two independently would leave a cycle
+  # nothing downstream could order. Takes the parent-sanitised attrs, so the
+  # nesting handed over is the nesting that was actually stored.
   defp persist_blockers(action_points, ids_by_position) do
-    action_points
-    |> Enum.with_index(1)
+    indexed = Enum.with_index(action_points, 1)
+
+    nesting =
+      for {%{parent: parent}, position} <- indexed, parent, do: {parent, position}
+
+    indexed
     |> Enum.map(fn {attrs, position} -> {position, Map.get(attrs, :blocked_by, [])} end)
-    |> Blocker.sanitise()
+    |> Blocker.sanitise(nesting)
     |> Enum.each(fn {blocked, blocking} ->
       Repo.insert!(%Blocker{
         action_point_id: ids_by_position[blocked],
@@ -490,7 +504,11 @@ defmodule ActionPoints.Meetings do
   end
 
   @doc """
-  Marks an Action Point accepted or rejected. Rejection is reversible — the
+  Marks an Action Point accepted or rejected. There is no third argument:
+  `:undecided` is where an Action Point starts and Review never returns it
+  there, because nothing in the walk may be skipped or un-decided.
+
+  Rejection is reversible — the
   row keeps everything except its standing in the Review — with one exception:
   its Blockers (in both directions) are removed outright, so no pushed issue
   can ever point at something that was never created. Accepting again does not
@@ -706,9 +724,45 @@ defmodule ActionPoints.Meetings do
   end
 
   @doc """
+  The Action Points of an Extraction in the order Review walks them —
+  dependencies first, the consequential decision last (ADR-0010). Delegates
+  the ordering to `ActionPoints.Meetings.DependencyOrder.sort/1`, which a
+  caller already holding a preloaded Extraction can use directly instead.
+
+  Preloads each Blocker's `blocked_by` as `get_extraction!/2` does. The sort
+  itself needs only the id on the Blocker row, but a step that shows one has
+  to name the Action Point it waits on, and that is the whole audience here.
+  """
+  def list_action_points_in_dependency_order(extraction_id) do
+    Repo.all(
+      from ap in ActionPoint,
+        where: ap.extraction_id == ^extraction_id,
+        preload: [blockers: :blocked_by]
+    )
+    |> DependencyOrder.sort()
+  end
+
+  @doc """
+  Where the walk stands: the first Action Point in dependency order that has
+  not been decided, or `nil` once every one has been.
+
+  A query over rows already written, never stored progress — every Accept and
+  Reject writes a row, so closing the tab, crashing, deploying, or coming back
+  the next day all land on the same step (ADR-0010).
+  """
+  def next_undecided_action_point(extraction_id) do
+    extraction_id
+    |> list_action_points_in_dependency_order()
+    |> Enum.find(&(&1.status == :undecided))
+  end
+
+  @doc """
   Orders a Review's Action Points for its indented one-level list: top-level
   Action Points by position, each followed immediately by its Subtasks in
   position order. Pure — feed it the preloaded, position-ordered list.
+
+  The list's own display order, unrelated to the order the walk decides them
+  in — see `list_action_points_in_dependency_order/1` for that.
   """
   def order_for_review(action_points) do
     subtasks =

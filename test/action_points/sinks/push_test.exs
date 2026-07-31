@@ -61,7 +61,11 @@ defmodule ActionPoints.Sinks.PushTest do
       Meetings.create_extraction(nil, @session_token, %{"transcript_text" => @transcript})
 
     Meetings.run_extraction(extraction)
-    Meetings.get_extraction!(extraction.id, @session_token)
+    extraction = Meetings.get_extraction!(extraction.id, @session_token)
+
+    # A Push acts on decisions, and since ADR-0010 nothing is accepted by
+    # default: these tests start from a Review that has been walked.
+    %{extraction | action_points: accept_action_points(extraction.action_points)}
   end
 
   defp reload_action_points(extraction) do

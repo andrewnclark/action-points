@@ -681,6 +681,13 @@ defmodule ActionPoints.MeetingsTest do
         Meetings.create_extraction(nil, session_token, %{"transcript_text" => @transcript})
 
       Meetings.run_extraction(extraction)
+
+      # Waiting to Push means decided and accepted, never merely extracted.
+      extraction.id
+      |> Meetings.get_extraction!(session_token)
+      |> Map.fetch!(:action_points)
+      |> accept_action_points()
+
       extraction
     end
 

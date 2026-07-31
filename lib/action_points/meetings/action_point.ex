@@ -17,7 +17,12 @@ defmodule ActionPoints.Meetings.ActionPoint do
     # born from it. Written once, when the Extraction finalises.
     field :assignee_guess, :string
     field :due_date, :date
-    field :status, Ecto.Enum, values: [:accepted, :rejected], default: :accepted
+    # The Review decision. `:undecided` is where every Action Point starts and
+    # it is the reason strict decision means anything: without it, "I accepted
+    # this" cannot be told from "I have not looked at it" (ADR-0010). It is a
+    # starting state and not a destination — Review moves out of it and never
+    # back, so `Meetings.set_action_point_status/2` accepts only the other two.
+    field :status, Ecto.Enum, values: [:undecided, :accepted, :rejected], default: :undecided
 
     # Grounding Quotes: verbatim Transcript excerpts, verified when the
     # Extraction finalised. Removable at Review but never editable — an
@@ -72,6 +77,11 @@ defmodule ActionPoints.Meetings.ActionPoint do
   @doc """
   Whether a Push would create this Action Point right now: accepted in the
   Review and not yet pushed. Mirrors the query in `ActionPoints.Meetings`.
+
+  Unchanged by `:undecided`, and that is the point: because it tests for
+  `:accepted` rather than against `:rejected`, an Action Point nobody has
+  looked at is not pushable and a half-finished walk Pushes nothing. The
+  safety property arrives with the enum rather than with a new guard.
   """
   def pushable?(%__MODULE__{} = action_point) do
     action_point.status == :accepted and is_nil(action_point.sink_issue_id)

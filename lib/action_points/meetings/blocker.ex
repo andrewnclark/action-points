@@ -31,22 +31,34 @@ defmodule ActionPoints.Meetings.Blocker do
 
   Edges are considered in the order the Extraction proposed them, so a cycle
   is broken at the edge that closes it, not at an arbitrary one.
+
+  `nesting` carries the Subtask relations the same Extraction proposed, as
+  already-sanitised `{parent_position, child_position}` pairs. They are
+  dependencies in exactly the same sense — Review decides a Subtask before its
+  parent, and a Blocker before what it blocks (ADR-0010) — so they take part in
+  the cycle check without ever being returned as Blockers. Without them a
+  Blocker running from a parent down to its own Subtask would survive, and the
+  loop it closes has no order for the walk to find. Nesting is checked, never
+  dropped: hierarchy is settled before this runs, and a Blocker is the cheaper
+  of the two to lose.
   """
-  def sanitise(proposals) do
+  def sanitise(proposals, nesting \\ []) do
     count = length(proposals)
 
-    proposals
-    |> Enum.flat_map(fn {position, blocked_by} -> Enum.map(blocked_by, &{position, &1}) end)
-    |> Enum.reduce([], fn {blocked, blocker} = edge, kept ->
-      cond do
-        not is_integer(blocker) or blocker not in 1..count//1 -> kept
-        blocked == blocker -> kept
-        edge in kept -> kept
-        creates_cycle?(kept, edge) -> kept
-        true -> [edge | kept]
-      end
-    end)
-    |> Enum.reverse()
+    {kept, _graph} =
+      proposals
+      |> Enum.flat_map(fn {position, blocked_by} -> Enum.map(blocked_by, &{position, &1}) end)
+      |> Enum.reduce({[], nesting}, fn {blocked, blocker} = edge, {kept, graph} ->
+        cond do
+          not is_integer(blocker) or blocker not in 1..count//1 -> {kept, graph}
+          blocked == blocker -> {kept, graph}
+          edge in kept -> {kept, graph}
+          creates_cycle?(graph, edge) -> {kept, graph}
+          true -> {[edge | kept], [edge | graph]}
+        end
+      end)
+
+    Enum.reverse(kept)
   end
 
   @doc """
