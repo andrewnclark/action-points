@@ -18,10 +18,16 @@ defmodule ActionPoints.Meetings.BlockersTest do
   # proposals (one list per position) and returns them as stored, in position
   # order, with their Blockers preloaded.
   defp extract_with_blockers(blocked_by_lists) do
+    extract_with_relations(Enum.map(blocked_by_lists, &%{blocked_by: &1}))
+  end
+
+  # The same, for the cases that also need the Extraction's proposed nesting:
+  # one map of relation attrs (`:blocked_by`, `:parent`) per Action Point.
+  defp extract_with_relations(relations) do
     action_points =
       @titles
-      |> Enum.zip(blocked_by_lists)
-      |> Enum.map(fn {title, blocked_by} -> %{title: title, blocked_by: blocked_by} end)
+      |> Enum.zip(relations)
+      |> Enum.map(fn {title, attrs} -> Map.put(attrs, :title, title) end)
 
     stub_extractor({:ok, action_points})
 
@@ -89,6 +95,47 @@ defmodule ActionPoints.Meetings.BlockersTest do
       assert blocker_titles(first) == ["Write the runbook"]
       assert blocker_titles(second) == ["Migrate the database"]
       assert blocker_titles(third) == []
+    end
+
+    # Nesting is a dependency too — Review decides a Subtask before its parent
+    # (ADR-0010) — so the hygiene has to look for a cycle across both kinds of
+    # relation at once. Sanitising them separately leaves a loop the walk
+    # cannot order.
+    test "a Blocker from a parent down to its own Subtask is dropped as the cycle it closes" do
+      [parent, child, _third] =
+        extract_with_relations([
+          %{},
+          %{parent: 1, blocked_by: [1]},
+          %{}
+        ])
+
+      assert blocker_titles(parent) == []
+      assert blocker_titles(child) == []
+      assert child.parent_id == parent.id
+    end
+
+    test "a cycle closed through the nesting by a longer Blocker chain is broken too" do
+      # 1 is the parent of 3. Proposed: 2 waits on 1, 3 waits on 2. The second
+      # edge closes the loop 1 → 2 → 3 → 1, because the parent already waits on
+      # its own child.
+      [_parent, second, child] =
+        extract_with_relations([
+          %{},
+          %{blocked_by: [1]},
+          %{parent: 1, blocked_by: [2]}
+        ])
+
+      assert blocker_titles(second) == ["Migrate the database"]
+      assert blocker_titles(child) == []
+    end
+
+    test "a Blocker running the same way as the nesting survives" do
+      # The parent waiting on its own child is what the nesting already says,
+      # so stating it as a Blocker too closes nothing.
+      [parent, _child, _third] =
+        extract_with_relations([%{blocked_by: [2]}, %{parent: 1}, %{}])
+
+      assert blocker_titles(parent) == ["Deploy the new service"]
     end
 
     test "a re-run Extraction replaces its relations rather than appending" do

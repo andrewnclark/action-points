@@ -57,7 +57,16 @@ defmodule ActionPointsWeb.ReviewPastDueTest do
       Meetings.create_extraction(nil, session_token, %{"transcript_text" => @transcript})
 
     Meetings.run_extraction(extraction)
-    [action_point | _] = action_points = extraction_action_points(extraction, session_token)
+
+    # The past-due flag is a property of an accepted Action Point, and since
+    # ADR-0010 nothing arrives accepted — so these tests state the acceptance
+    # they stand on. An undecided Action Point is unflagged for the same reason
+    # a rejected one is: it is not going anywhere.
+    [action_point | _] =
+      action_points =
+      extraction
+      |> extraction_action_points(session_token)
+      |> accept_action_points()
 
     # The connect params must be put on the conn that actually opens the
     # Review: `live/2` with a path recycles the conn, dropping them.
