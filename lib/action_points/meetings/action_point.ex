@@ -11,6 +11,10 @@ defmodule ActionPoints.Meetings.ActionPoint do
     field :position, :integer
     field :title, :string
     field :description, :string
+    # The Named Person: the name the meeting said (see CONTEXT.md). A record of
+    # the Transcript, so nothing in Review may rewrite it — it is also the
+    # Assignee Mapping key, and a rewrite would silently re-key any mapping
+    # born from it. Written once, when the Extraction finalises.
     field :assignee_guess, :string
     field :due_date, :date
     field :status, Ecto.Enum, values: [:accepted, :rejected], default: :accepted
@@ -27,14 +31,20 @@ defmodule ActionPoints.Meetings.ActionPoint do
     # can survive with no date resolved, and a date survives a dropped quote.
     field :timing_quote, :string
 
-    # The assignee guess resolved to a real Task Sink member (ADR-0007):
-    # `assignee_resolution` is nil until Review has looked at this row once,
-    # and stays whatever it settled on after that — a later Review reopening
-    # never overwrites an explicit pick or an explicit clear. `:mapped` and
-    # `:suggested` are set automatically from a mapping or an unambiguous
-    # name match; `:manual` and `:unassigned` come from the user.
-    field :assignee_sink_user_id, :string
-    field :assignee_display_name, :string
+    # The Sink Member: who the Named Person is in the Task Sink (ADR-0007).
+    # The name and handle are copied here rather than looked up, because the
+    # live member list is unavailable on a later visit — and for a pushed
+    # Action Point that visit is the only one left.
+    #
+    # `assignee_resolution` is how the Assignee Mapping was arrived at. It is
+    # nil until Review has looked at this row once, and stays whatever it
+    # settled on after that — a later Review reopening never overwrites an
+    # explicit pick or an explicit clear. `:mapped` and `:suggested` are set
+    # automatically from a mapping or an unambiguous name match; `:manual` and
+    # `:unassigned` come from the user.
+    field :sink_member_id, :string
+    field :sink_member_name, :string
+    field :sink_member_handle, :string
     field :assignee_resolution, Ecto.Enum, values: [:mapped, :suggested, :manual, :unassigned]
 
     # The created-issue reference, set when this Action Point is pushed to the
@@ -75,11 +85,16 @@ defmodule ActionPoints.Meetings.ActionPoint do
 
   @doc """
   Changeset for the user's edits during Review. Title stays required;
-  description, assignee guess, and due date may all be cleared.
+  description and due date may both be cleared.
+
+  The Named Person is deliberately not castable here. It is a record of what
+  the meeting said rather than an attribute of the proposal (ADR-0010), and
+  the omission is the enforcement: a crafted submit naming `assignee_guess`
+  changes nothing, so the rule does not depend on a template.
   """
   def curation_changeset(action_point, attrs) do
     action_point
-    |> cast(attrs, [:title, :description, :assignee_guess, :due_date], force_changes: true)
+    |> cast(attrs, [:title, :description, :due_date], force_changes: true)
     |> validate_required([:title])
   end
 end

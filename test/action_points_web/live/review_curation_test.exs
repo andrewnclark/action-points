@@ -133,7 +133,7 @@ defmodule ActionPointsWeb.ReviewCurationTest do
     assert has_element?(review, "#action-points li", "Now with the final numbers.")
   end
 
-  test "assignee guess and due date can be changed", %{conn: conn} do
+  test "the due date can be changed", %{conn: conn} do
     %{review: review, action_points: [first, _second]} = open_review(conn)
 
     open_editor(review, first)
@@ -142,17 +142,15 @@ defmodule ActionPointsWeb.ReviewCurationTest do
     |> form("#edit-#{dom_id(first)}",
       action_point: %{
         title: "Send the Q3 report to finance",
-        assignee_guess: "Sam",
         due_date: "2026-08-14"
       }
     )
     |> render_submit()
 
-    assert has_element?(review, "#action-points li [data-role=assignee]", "Sam")
     assert has_element?(review, "#action-points li [data-role=due-date]", "14 Aug 2026")
   end
 
-  test "assignee guess and due date can be cleared", %{conn: conn} do
+  test "the due date can be cleared", %{conn: conn} do
     %{review: review, action_points: [first, _second]} = open_review(conn)
 
     open_editor(review, first)
@@ -161,14 +159,37 @@ defmodule ActionPointsWeb.ReviewCurationTest do
     |> form("#edit-#{dom_id(first)}",
       action_point: %{
         title: "Send the Q3 report to finance",
-        assignee_guess: "",
         due_date: ""
       }
     )
     |> render_submit()
 
-    refute has_element?(review, "##{dom_id(first)} [data-role=assignee]")
     refute has_element?(review, "##{dom_id(first)} [data-role=due-date]")
+  end
+
+  # The Named Person is what the meeting said, so nothing in Review may rewrite
+  # it — and it is also the Assignee Mapping key, so a rewrite would silently
+  # re-key any mapping born from it. There is no field for it any more, and a
+  # crafted submit that names it anyway changes nothing.
+  test "the edit form offers no way to rewrite the Named Person", %{conn: conn} do
+    %{review: review, action_points: [first, _second]} = open_review(conn)
+
+    open_editor(review, first)
+
+    refute has_element?(review, "#edit-#{dom_id(first)} [name='action_point[assignee_guess]']")
+  end
+
+  test "a crafted submit cannot rewrite the Named Person", %{conn: conn} do
+    %{review: review, action_points: [first, _second]} = open_review(conn)
+
+    open_editor(review, first)
+
+    review
+    |> form("#edit-#{dom_id(first)}", action_point: %{title: "Send the Q3 report to finance"})
+    |> render_submit(%{"action_point" => %{"assignee_guess" => "Sam"}})
+
+    assert ActionPoints.Repo.get!(ActionPoints.Meetings.ActionPoint, first.id).assignee_guess ==
+             "Priya"
   end
 
   test "clearing the title keeps the edit open with an error", %{conn: conn} do
@@ -192,9 +213,7 @@ defmodule ActionPointsWeb.ReviewCurationTest do
     open_editor(review, first)
 
     review
-    |> form("#edit-#{dom_id(first)}",
-      action_point: %{title: "Send the final Q3 numbers", assignee_guess: "Sam"}
-    )
+    |> form("#edit-#{dom_id(first)}", action_point: %{title: "Send the final Q3 numbers"})
     |> render_submit()
 
     {:ok, reloaded, _html} = live(conn, path)
@@ -205,7 +224,7 @@ defmodule ActionPointsWeb.ReviewCurationTest do
              "Send the final Q3 numbers"
            )
 
-    assert has_element?(reloaded, "#action-points li [data-role=assignee]", "Sam")
+    assert has_element?(reloaded, "#action-points li [data-role=named-person]", "Priya")
 
     assert has_element?(
              reloaded,

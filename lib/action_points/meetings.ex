@@ -583,37 +583,42 @@ defmodule ActionPoints.Meetings do
   end
 
   @doc """
-  Persists a resolved assignee onto an Action Point — from an Assignee
-  Mapping hit, an unambiguous name-match suggestion, or the user's own pick
-  or clear (ADR-0007). `sink_user` is `%{id:, name:}` from the live Task Sink
-  member list, or `nil` for a deliberately unassigned pick. Never touches
-  `assignee_guess`: it stays the model's raw output and the mapping key.
+  Persists the Sink Member onto an Action Point — from an Assignee Mapping
+  hit, an unambiguous name-match suggestion, or the user's own pick or clear
+  (ADR-0007). `sink_member` is `%{id:, name:}`, optionally `handle:`, from the
+  live Task Sink member list or an Assignee Mapping's cache; `nil` for a
+  deliberately unassigned pick. Never touches `assignee_guess`: the Named
+  Person stays the meeting's word and the mapping key.
+
+  The name and handle are copied rather than referenced, because the live
+  member list is not available on a later visit.
 
   Sets the fields directly rather than through a cast changeset — they are
   never user input, only ever this module's own resolved values.
   """
-  def resolve_action_point_assignee(%ActionPoint{} = action_point, resolution, sink_user)
+  def resolve_action_point_assignee(%ActionPoint{} = action_point, resolution, sink_member)
       when resolution in [:mapped, :suggested, :manual, :unassigned] do
     action_point
     |> Ecto.Changeset.change(
       assignee_resolution: resolution,
-      assignee_sink_user_id: sink_user && sink_user.id,
-      assignee_display_name: sink_user && sink_user.name
+      sink_member_id: sink_member && sink_member.id,
+      sink_member_name: sink_member && sink_member.name,
+      sink_member_handle: sink_member && Map.get(sink_member, :handle)
     )
     |> Repo.update!()
   end
 
   @doc """
-  Applies the user's own assignee pick during Review — `sink_user` is
-  `%{id:, name:}` from the live Task Sink member list, or `nil` to
-  deliberately push this Action Point unassigned.
+  Applies the user's own Sink Member pick during Review — `sink_member` is
+  `%{id:, name:}`, optionally `handle:`, from the live Task Sink member list,
+  or `nil` to deliberately push this Action Point unassigned.
   """
   def set_action_point_assignee(%ActionPoint{} = action_point, nil) do
     resolve_action_point_assignee(action_point, :unassigned, nil)
   end
 
-  def set_action_point_assignee(%ActionPoint{} = action_point, %{} = sink_user) do
-    resolve_action_point_assignee(action_point, :manual, sink_user)
+  def set_action_point_assignee(%ActionPoint{} = action_point, %{} = sink_member) do
+    resolve_action_point_assignee(action_point, :manual, sink_member)
   end
 
   ## Blocker curation
