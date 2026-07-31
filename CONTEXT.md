@@ -15,7 +15,7 @@ A single run of the model over one Transcript, producing Action Points. Either s
 _Avoid_: processing, analysis, run
 
 **Action Point**:
-A task candidate produced by an Extraction — title, description, assignee guess, optional due date. It is a proposal, not yet real; it becomes a task only when pushed.
+A task candidate produced by an Extraction — title, description, the Named Person, optional due date. It is a proposal, not yet real; it becomes a task only when pushed.
 _Avoid_: task (reserved for what exists in the Task Sink), todo, item, suggestion
 
 **Review**:
@@ -38,8 +38,16 @@ _Avoid_: preview, free preview, trial
 The one Extraction we author rather than run: a fictional Transcript and the Action Points that go with it, written down so the landing page can show the product working without a model call, a Credit, or a claim on the Demo's rate limit. Its content is chosen to put every state Review can show on the page at once — Blockers, a nesting, a Timing Quote with a date and one without, a deadline already past, an Action Point nobody was named for. It is a real Extraction row curated on the real Review screen; only the meeting is invented, and the screen says so. Everything else the visitor does with it — accepting, editing, Pushing — is the product.
 _Avoid_: demo (the Demo is a real run of the pipeline), example, dummy data
 
+**Named Person**:
+The name the meeting used for whoever an Action Point fell to, carried on the Action Point exactly as the Extraction reported it. A record of the Transcript, the same species of evidence as a Grounding Quote: it cannot be wrong, because it is not a claim about the user's workspace — "Priya" is what was said whether or not a Priya exists in the Task Sink. So nothing in the product rewrites it ([ADR-0010](docs/adr/0010-review-is-a-dependency-ordered-walk-not-a-list.md)), and it stays on screen through every state the Sink Member side can be in — most of all while the user is being asked who this is, which is the question the name answers.
+_Avoid_: assignee (bare — an assignee is this and a Sink Member, and saying it alone hides which), assignee name, owner
+
+**Sink Member**:
+A person in the connected Task Sink, and the end an Assignee Mapping resolves a Named Person to. The only half of an assignee that can be wrong, so it is the only half the user can change. Their name and handle are copied onto the Action Point at the moment they are resolved rather than looked up later: the sink's live member list needs a reachable connection, and a pushed Action Point revisited a week on has none.
+_Avoid_: assignee (bare), sink user, workspace user, teammate
+
 **Assignee Mapping**:
-A remembered link from a guessed name to one Task Sink user, scoped to a Sink Connection (it dies with the connection). Born during Review the first time a name is resolved; thereafter that name resolves automatically. Push assigns only what Review resolved — nothing is matched silently at Push.
+The remembered link between the two — from a Named Person, folded to a comparison key, to one Sink Member — scoped to a Sink Connection (it dies with the connection). Born during Review the first time a name is resolved; thereafter that name resolves automatically. Because the Named Person is the key, rewriting it would silently re-key the mapping, which is one reason it is not the user's to rewrite. Push assigns only what Review resolved — nothing is matched silently at Push.
 _Avoid_: user sync, alias, name matching
 
 **Meeting Date**:
@@ -59,7 +67,7 @@ A short verbatim excerpt from the Transcript attached to an Action Point as evid
 _Avoid_: citation, snippet, source
 
 **Timing Quote**:
-A short verbatim excerpt from the Transcript recording what was said about _when_ an Action Point is due, verified to actually appear in the Transcript. Present whenever the meeting expressed timing, with or without a resolved due date — so language that pins no date ("in a few weeks") still reaches the assignee. Shown at Review beside the due date and travelling with the Action Point into the Task Sink.
+A short verbatim excerpt from the Transcript recording what was said about _when_ an Action Point is due, verified to actually appear in the Transcript. Present whenever the meeting expressed timing, with or without a resolved due date — so language that pins no date ("in a few weeks") still reaches whoever the task lands on. Shown at Review beside the due date and travelling with the Action Point into the Task Sink.
 _Avoid_: deadline text, date quote, due date phrase
 
 **Blocker**:

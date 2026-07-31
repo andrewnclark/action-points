@@ -5,6 +5,8 @@ defmodule ActionPointsWeb.ReviewAssigneeTest do
   import Phoenix.LiveViewTest
 
   alias ActionPoints.Meetings
+  alias ActionPoints.Meetings.ActionPoint
+  alias ActionPoints.Repo
   alias ActionPoints.Sinks
 
   @api_key "lin_api_secret_key_abcd"
@@ -48,10 +50,13 @@ defmodule ActionPointsWeb.ReviewAssigneeTest do
 
     Meetings.run_extraction(extraction)
 
-    {:ok, review, _html} = live(conn, ~p"/review/#{extraction}")
+    path = ~p"/review/#{extraction}"
+    {:ok, review, _html} = live(conn, path)
 
     %{
       review: review,
+      conn: conn,
+      path: path,
       action_points: Meetings.get_extraction!(extraction.id, session_token).action_points
     }
   end
@@ -140,6 +145,13 @@ defmodule ActionPointsWeb.ReviewAssigneeTest do
 
     assert has_element?(review, "##{dom_id(first)} option[value=u-priya][selected]")
     refute has_element?(review, "##{dom_id(first)} [data-role=assignee-suggested]")
+
+    # The user's own pick writes the handle down too — it is the path taken
+    # after a wrong suggestion, and the row must not come out of it knowing
+    # less than one resolved automatically.
+    picked = Repo.get!(ActionPoint, first.id)
+    assert picked.sink_member_id == "u-priya"
+    assert picked.sink_member_handle == "priya"
   end
 
   test "clearing an assignee through the picker deliberately unassigns it", %{
@@ -177,6 +189,83 @@ defmodule ActionPointsWeb.ReviewAssigneeTest do
 
     assert has_element?(review, "#assignee-degraded-notice")
     refute has_element?(review, "##{picker_id(first)}")
-    assert has_element?(review, "##{dom_id(first)} [data-role=assignee]", "Priya")
+    assert has_element?(review, "##{dom_id(first)} [data-role=named-person]", "Priya")
+  end
+
+  # The Named Person is a record of what the meeting said, so it survives every
+  # state the Sink Member side can be in — most of all the picker, where it is
+  # the only thing that answers the question the picker is asking.
+  test "the Named Person stays on screen beside the picker", %{conn: conn, scope: scope} do
+    connect_sink(scope)
+
+    Application.put_env(:action_points, :fake_task_sink,
+      users: {:ok, [%{id: "u-priya", name: "Priya Sharma", handle: "priya"}]}
+    )
+
+    %{review: review, action_points: [first]} =
+      open_review(conn, [%{title: "Send the report", assignee_guess: "Priya"}])
+
+    assert has_element?(review, "##{picker_id(first)}")
+    assert has_element?(review, "##{dom_id(first)} [data-role=named-person]", "Priya")
+  end
+
+  test "the Named Person stays on screen beside an unmatched picker", %{conn: conn, scope: scope} do
+    connect_sink(scope)
+
+    Application.put_env(:action_points, :fake_task_sink,
+      users: {:ok, [%{id: "u-priya", name: "Priya Sharma", handle: "priya"}]}
+    )
+
+    %{review: review, action_points: [first]} =
+      open_review(conn, [%{title: "Book the venue", assignee_guess: "Bogdan"}])
+
+    assert has_element?(review, "##{picker_id(first)} option[value=''][selected]")
+    assert has_element?(review, "##{dom_id(first)} [data-role=named-person]", "Bogdan")
+  end
+
+  # Once the member list is unavailable there is no picker, but both facts are
+  # still on the row — and the handle is there because it was written down when
+  # it was known, not re-fetched from a list that is gone.
+  test "a resolved Sink Member survives a later visit with no member list, handle and all",
+       %{conn: conn, scope: scope} do
+    connect_sink(scope)
+
+    Application.put_env(:action_points, :fake_task_sink,
+      users: {:ok, [%{id: "u-priya", name: "Priya Sharma", handle: "priya"}]}
+    )
+
+    %{conn: conn, path: path, action_points: [first]} =
+      open_review(conn, [%{title: "Send the report", assignee_guess: "Priya Sharma"}])
+
+    resolved = Repo.get!(ActionPoint, first.id)
+    assert resolved.sink_member_id == "u-priya"
+    assert resolved.sink_member_name == "Priya Sharma"
+    assert resolved.sink_member_handle == "priya"
+
+    Application.put_env(:action_points, :fake_task_sink, users: {:error, :unavailable})
+    {:ok, revisit, _html} = live(conn, path)
+
+    refute has_element?(revisit, "##{picker_id(first)}")
+    assert has_element?(revisit, "##{dom_id(first)} [data-role=named-person]", "Priya Sharma")
+    assert has_element?(revisit, "##{dom_id(first)} [data-role=sink-member]", "@priya")
+  end
+
+  # An Action Point nobody was named for has no Named Person to render; the
+  # Sink Member side still says what it knows.
+  test "an Action Point with no Named Person renders only the Sink Member side", %{
+    conn: conn,
+    scope: scope
+  } do
+    connect_sink(scope)
+
+    Application.put_env(:action_points, :fake_task_sink,
+      users: {:ok, [%{id: "u-priya", name: "Priya Sharma", handle: "priya"}]}
+    )
+
+    %{review: review, action_points: [first]} =
+      open_review(conn, [%{title: "Circulate the notes", assignee_guess: nil}])
+
+    refute has_element?(review, "##{dom_id(first)} [data-role=named-person]")
+    assert has_element?(review, "##{picker_id(first)}")
   end
 end

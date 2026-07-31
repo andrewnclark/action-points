@@ -111,13 +111,23 @@ defmodule ActionPoints.Sinks.PushTest do
     extraction = create_review(@two_action_points)
     [first, _second] = extraction.action_points
 
-    Meetings.set_action_point_assignee(first, %{id: "u-priya", name: "Priya Sharma"})
+    Meetings.set_action_point_assignee(first, %{
+      id: "u-priya",
+      name: "Priya Sharma",
+      handle: "priya"
+    })
 
     {:ok, _pushed} = Sinks.push(scope, extraction)
 
     connection = Sinks.get_connection(scope)
 
-    assert %AssigneeMapping{sink_user_id: "u-priya", display_name: "Priya Sharma"} =
+    # The handle rides along: the mapping is what a later Review resolves from
+    # when the live member list is out of reach, so it has to carry both.
+    assert %AssigneeMapping{
+             sink_user_id: "u-priya",
+             display_name: "Priya Sharma",
+             handle: "priya"
+           } =
              Repo.get_by!(AssigneeMapping,
                sink_connection_id: connection.id,
                normalized_guess: "priya"
