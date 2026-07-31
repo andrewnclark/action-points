@@ -499,7 +499,11 @@ defmodule ActionPoints.Meetings do
       from ap in ActionPoint,
         join: e in assoc(ap, :extraction),
         where: ap.id == ^id and e.session_token == ^session_token,
-        preload: [blockers: :blocked_by]
+        # Both sets of relations a decision has to answer to: what this waits
+        # on, and what waits on it. Review refuses a decision whose
+        # dependencies have not been decided first (ADR-0010), and that rule is
+        # checked against the row rather than against the screen that asked.
+        preload: [:subtasks, blockers: :blocked_by]
     )
   end
 

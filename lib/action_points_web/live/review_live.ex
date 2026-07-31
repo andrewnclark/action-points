@@ -289,13 +289,15 @@ defmodule ActionPointsWeb.ReviewLive do
               </div>
             </div>
 
-            <%!-- One Action Point per screen, in dependency order, until every
-            one has been decided (ADR-0010). The position is a query over the
-            rows, never held in this process, so a reload, a crash or a deploy
-            all land back on the same step. --%>
+            <%!-- One Action Point per screen — or one family, parent and
+            Subtasks together — in dependency order, until every one has been
+            decided (ADR-0010). The position is a query over the rows, never
+            held in this process, so a reload, a crash or a deploy all land
+            back on the same step. --%>
             <.step
               :if={@step}
               action_point={@step}
+              subtasks={@step_subtasks}
               sink_users={@sink_users}
               sink_live?={@sink_live?}
               decided_count={@accepted_count + @rejected_count}
@@ -486,9 +488,98 @@ defmodule ActionPointsWeb.ReviewLive do
     """
   end
 
-  # The step: one Action Point owning the screen (ADR-0010). Title, then two
-  # columns of comparable weight — what the meeting said on the left, the
-  # issue we would create on the right — and the decision beneath them.
+  # The step: one Action Point owning the screen, or — where the meeting broke
+  # one down — a whole family on it (ADR-0010).
+  #
+  # A Subtask cannot be judged without the thing it belongs to, and the
+  # parent's title alone is not that: whether a Subtask really belongs to the
+  # deliverable or should stand on its own is a question about its description,
+  # its quotes and its deadline. So the parent renders in full and its Subtasks
+  # render beneath it, each decidable where it stands.
+  #
+  # The parent is decided last, and cannot be decided sooner: rejecting it
+  # promotes whatever survived to top level and that is irreversible at Review
+  # (ADR-0009), so the decision waits until it can be taken knowing what
+  # survived. The wait is a disabled control, not a sentence on its own.
+  #
+  # Nesting is never deeper than one level, so a family is bounded and this
+  # screen cannot grow a third rendering of an Action Point.
+  attr :action_point, :map, required: true
+  attr :subtasks, :list, required: true, doc: "the family's children, already in walk order"
+  attr :sink_users, :list, required: true
+  attr :sink_live?, :boolean, required: true
+  attr :decided_count, :integer, required: true
+  attr :action_point_count, :integer, required: true
+  attr :today, Date, required: true
+
+  defp step(assigns) do
+    ~H"""
+    <div
+      id={"step-#{@action_point.id}"}
+      data-role="step"
+      data-status={@action_point.status}
+      data-family={@subtasks != []}
+      class="rounded-box border border-base-300/60 bg-base-200 p-5 sm:p-6"
+    >
+      <%!-- The counter counts Action Points decided, never steps: a family is
+      one step and several Action Points, and the header above promised a
+      number of Action Points. --%>
+      <p class="text-[11px] tracking-[0.08em] text-base-content/65 uppercase">
+        {@decided_count} of {@action_point_count} decided
+      </p>
+
+      <.action_point_panel
+        action_point={@action_point}
+        sink_users={@sink_users}
+        sink_live?={@sink_live?}
+        today={@today}
+      />
+
+      <%!-- The children, in a compressed rendering of the very same panel —
+      one component, so the two cannot drift apart. --%>
+      <div :if={@subtasks != []} data-role="family" class="mt-6 space-y-3">
+        <h3 class="text-[11px] font-medium tracking-[0.08em] text-base-content/65 uppercase">
+          {ngettext(
+            "1 Subtask of this Action Point",
+            "%{count} Subtasks of this Action Point",
+            length(@subtasks)
+          )}
+        </h3>
+        <div
+          :for={subtask <- @subtasks}
+          id={"subtask-#{subtask.id}"}
+          data-role="family-subtask"
+          data-status={subtask.status}
+          class={[
+            "rounded-box border border-l-4 p-4",
+            (subtask.status == :undecided && "border-base-300/60 border-l-base-300 bg-base-100") ||
+              "border-base-300/40 border-l-base-300/40 bg-base-100/50"
+          ]}
+        >
+          <.action_point_panel
+            action_point={subtask}
+            sink_users={@sink_users}
+            sink_live?={@sink_live?}
+            today={@today}
+            compact
+          />
+          <.decision_bar action_point={subtask} locked_reason={lock_reason(subtask, [])} compact />
+        </div>
+      </div>
+
+      <%!-- Last on the screen because it is the last decision available: the
+      parent's own Accept and Reject, under everything they depend on. --%>
+      <.decision_bar
+        action_point={@action_point}
+        locked_reason={lock_reason(@action_point, @subtasks)}
+      />
+    </div>
+    """
+  end
+
+  # An Action Point rendered in full: title, then two columns of comparable
+  # weight — what the meeting said on the left, the issue we would create on
+  # the right.
   #
   # The columns are a claim enforced by what can be touched: nothing in the
   # left one is interactive, because it is a record of the Transcript and a
@@ -498,34 +589,49 @@ defmodule ActionPointsWeb.ReviewLive do
   # On a narrow viewport they stack, left above right: the meeting is read
   # first and the issue second, which is the same argument the columns make
   # left to right.
+  #
+  # `compact` is the only difference between a step and a Subtask beneath one:
+  # the same rows, the same pills, the same controls, set smaller. Sharing the
+  # component rather than writing a second one is deliberate — a family shows
+  # this layout twice on one screen, and two copies of it would drift.
   attr :action_point, :map, required: true
   attr :sink_users, :list, required: true
   attr :sink_live?, :boolean, required: true
-  attr :decided_count, :integer, required: true
-  attr :action_point_count, :integer, required: true
   attr :today, Date, required: true
+  attr :compact, :boolean, default: false
 
-  defp step(assigns) do
+  defp action_point_panel(assigns) do
     # A pushed Action Point is a record of something that exists: its controls
     # freeze, and only the chips saying what was created remain.
     assigns = assign(assigns, :curatable?, is_nil(assigns.action_point.sink_issue_id))
 
     ~H"""
-    <div
-      id={"step-#{@action_point.id}"}
-      data-role="step"
-      data-status={@action_point.status}
-      data-parent-id={@action_point.parent_id}
-      class="rounded-box border border-base-300/60 bg-base-200 p-5 sm:p-6"
-    >
-      <p class="text-[11px] tracking-[0.08em] text-base-content/65 uppercase">
-        {@decided_count} of {@action_point_count} decided
-      </p>
-      <h2 data-role="step-title" class="mt-1 text-xl leading-snug font-semibold">
+    <div data-role={(@compact && "subtask-panel") || "step-panel"} class={@compact && "text-sm"}>
+      <%!-- A rejected Action Point is struck through wherever it is still on
+      screen, the same as on a decided row: the parent's Reject is taken
+      knowing what survived, so what did not survive has to look like it. --%>
+      <h2
+        :if={not @compact}
+        data-role="step-title"
+        class={[
+          "mt-1 text-xl leading-snug font-semibold",
+          @action_point.status == :rejected && "text-base-content/65 line-through"
+        ]}
+      >
         {@action_point.title}
       </h2>
+      <h3
+        :if={@compact}
+        data-role="subtask-title"
+        class={[
+          "text-base leading-snug font-semibold",
+          @action_point.status == :rejected && "text-base-content/65 line-through"
+        ]}
+      >
+        {@action_point.title}
+      </h3>
 
-      <div class="mt-5 grid gap-6 md:grid-cols-2">
+      <div class={["grid gap-6 md:grid-cols-2", (@compact && "mt-3") || "mt-5"]}>
         <.meeting_column action_point={@action_point} />
         <.issue_column
           action_point={@action_point}
@@ -535,58 +641,161 @@ defmodule ActionPointsWeb.ReviewLive do
           today={@today}
         />
       </div>
-
-      <%!-- Accept and Reject are the only ways forward, and Accept commits
-      what is on the screen: the pills wrote their changes when they were
-      used, so there is nothing left here to save separately. --%>
-      <div
-        :if={@curatable?}
-        data-role="step-decision"
-        class="mt-6 flex flex-wrap items-center gap-2 border-t border-base-300/60 pt-4"
-      >
-        <button
-          id={"step-#{@action_point.id}-accept"}
-          data-role="accept"
-          phx-click="accept"
-          phx-value-id={@action_point.id}
-          class="btn btn-primary btn-sm"
-        >
-          <.icon name="hero-check-micro" class="size-4" /> Accept
-        </button>
-        <button
-          id={"step-#{@action_point.id}-reject"}
-          data-role="reject"
-          phx-click="reject"
-          phx-value-id={@action_point.id}
-          class="btn btn-ghost btn-sm"
-        >
-          <.icon name="hero-x-mark-micro" class="size-4" /> Reject
-        </button>
-        <span class="ml-auto text-xs text-base-content/65">
-          Accepting creates this exactly as the right-hand column reads.
-        </span>
-      </div>
-      <div
-        :if={not @curatable?}
-        data-role="step-decision"
-        class="mt-6 flex flex-wrap items-center gap-2 border-t border-base-300/60 pt-4"
-      >
-        <a
-          data-role="sink-issue"
-          href={@action_point.sink_issue_url}
-          target="_blank"
-          rel="noopener"
-          class="inline-flex items-center gap-1 rounded-field border border-success/40 bg-success/10 px-2 py-0.5 text-xs font-medium text-success"
-        >
-          <.icon name="hero-check-micro" class="size-3" />
-          {@action_point.sink_issue_identifier}
-        </a>
-        <span class="text-xs text-base-content/65">
-          Already created in Linear — this step is a record of what was sent.
-        </span>
-      </div>
     </div>
     """
+  end
+
+  # Accept and Reject are the only ways forward, and Accept commits what is on
+  # the screen: the pills wrote their changes when they were used, so there is
+  # nothing left here to save separately.
+  #
+  # Three states, because a family puts more than one of them on a screen at
+  # once: the decision still to take, the decision already taken — which the
+  # parent's Reject has to be able to read off the page — and the record of an
+  # Action Point already in the sink.
+  #
+  # `locked_reason` is the walk's ordering reaching the markup: a decision
+  # whose dependencies are not all decided has its controls genuinely
+  # disabled, not merely styled as if, and the reason stands beside them.
+  attr :action_point, :map, required: true
+  attr :compact, :boolean, default: false
+  attr :locked_reason, :string, default: nil
+
+  defp decision_bar(assigns) do
+    assigns =
+      assigns
+      |> assign(:curatable?, is_nil(assigns.action_point.sink_issue_id))
+      |> assign(:prefix, (assigns.compact && "subtask") || "step")
+
+    ~H"""
+    <div
+      data-role={"#{@prefix}-decision"}
+      class={[
+        "flex flex-wrap items-center gap-2 border-t border-base-300/60",
+        (@compact && "mt-4 pt-3") || "mt-6 pt-4"
+      ]}
+    >
+      <%= cond do %>
+        <% not @curatable? -> %>
+          <a
+            data-role="sink-issue"
+            href={@action_point.sink_issue_url}
+            target="_blank"
+            rel="noopener"
+            class="inline-flex items-center gap-1 rounded-field border border-success/40 bg-success/10 px-2 py-0.5 text-xs font-medium text-success"
+          >
+            <.icon name="hero-check-micro" class="size-3" />
+            {@action_point.sink_issue_identifier}
+          </a>
+          <span class="text-xs text-base-content/65">
+            Already created in Linear — this step is a record of what was sent.
+          </span>
+        <% @action_point.status != :undecided -> %>
+          <%!-- Said, not merely styled: the parent's Reject below is taken
+          knowing which of these survived, so the screen has to state it. --%>
+          <span
+            data-role="decision-made"
+            data-decision={@action_point.status}
+            class={[
+              "inline-flex items-center gap-1 rounded-field border px-2 py-0.5 text-xs font-medium",
+              (@action_point.status == :accepted && "border-primary/40 bg-primary/10 text-primary") ||
+                "border-base-300 border-dashed text-base-content/65"
+            ]}
+          >
+            <.icon
+              name={(@action_point.status == :accepted && "hero-check-micro") || "hero-x-mark-micro"}
+              class="size-3"
+            />
+            {(@action_point.status == :accepted && "Accepted") || "Rejected"}
+          </span>
+          <%!-- A rejection is reversible into an acceptance and never the
+          other way — the same one-way rule the decided rows follow, so the
+          product has one answer to this and not two (ADR-0010). --%>
+          <button
+            :if={@action_point.status == :rejected}
+            id={"#{@prefix}-#{@action_point.id}-accept"}
+            data-role="accept"
+            phx-click="accept"
+            phx-value-id={@action_point.id}
+            class="btn btn-ghost btn-xs"
+            title="Accept this Action Point after all"
+          >
+            <.icon name="hero-arrow-uturn-left-micro" class="size-3.5" /> Accept
+          </button>
+        <% true -> %>
+          <button
+            id={"#{@prefix}-#{@action_point.id}-accept"}
+            data-role="accept"
+            phx-click="accept"
+            phx-value-id={@action_point.id}
+            disabled={@locked_reason != nil}
+            aria-describedby={@locked_reason && "#{@prefix}-#{@action_point.id}-locked"}
+            class={["btn btn-primary", (@compact && "btn-xs") || "btn-sm"]}
+          >
+            <.icon name="hero-check-micro" class="size-4" /> Accept
+          </button>
+          <button
+            id={"#{@prefix}-#{@action_point.id}-reject"}
+            data-role="reject"
+            phx-click="reject"
+            phx-value-id={@action_point.id}
+            disabled={@locked_reason != nil}
+            aria-describedby={@locked_reason && "#{@prefix}-#{@action_point.id}-locked"}
+            class={["btn btn-ghost", (@compact && "btn-xs") || "btn-sm"]}
+          >
+            <.icon name="hero-x-mark-micro" class="size-4" /> Reject
+          </button>
+          <span
+            :if={@locked_reason}
+            id={"#{@prefix}-#{@action_point.id}-locked"}
+            data-role="decision-locked"
+            class="text-xs text-base-content/65"
+          >
+            {@locked_reason}
+          </span>
+          <span :if={is_nil(@locked_reason)} class="ml-auto text-xs text-base-content/65">
+            Accepting creates this exactly as the right-hand column reads.
+          </span>
+      <% end %>
+    </div>
+    """
+  end
+
+  # Why a decision is not available yet, or nil when it is. "Disabled" on its
+  # own reads as a bug; the reason is what makes it read as a rule.
+  #
+  # Both directions of the walk's one rule (ADR-0010), because a family puts
+  # several Action Points on one screen and only the first of them is
+  # guaranteed to have had its turn: a Subtask can still be waiting on a
+  # Blocker nobody has reached, and a parent waits on all of its children.
+  #
+  # It says **Subtask**, which is what CONTEXT.md calls the thing and what the
+  # rest of this screen already says.
+  defp lock_reason(action_point, subtasks) do
+    undecided = Enum.count(subtasks, &(&1.status == :undecided))
+
+    cond do
+      blocker = undecided_blocker(action_point) ->
+        gettext(
+          "“%{title}” blocks this and hasn't been decided yet — the walk decides a Blocker first.",
+          title: blocker.blocked_by.title
+        )
+
+      undecided > 0 ->
+        ngettext(
+          "1 Subtask still to decide. Once it is, you can accept or reject “%{title}” — rejecting it would promote whatever survives to top level, and that can't be undone.",
+          "%{count} Subtasks still to decide. Once they all are, you can accept or reject “%{title}” — rejecting it would promote whatever survives to top level, and that can't be undone.",
+          undecided,
+          title: action_point.title
+        )
+
+      true ->
+        nil
+    end
+  end
+
+  defp undecided_blocker(action_point) do
+    Enum.find(action_point.blockers, &(&1.blocked_by.status == :undecided))
   end
 
   # The left column: what the meeting said, verbatim, and nothing that can be
@@ -714,7 +923,7 @@ defmodule ActionPointsWeb.ReviewLive do
         absent. --%>
         <button
           :if={@action_point.parent_id && @curatable?}
-          id={"step-#{@action_point.id}-promote"}
+          id={"action-point-#{@action_point.id}-promote"}
           data-role="promote"
           phx-click="promote"
           phx-value-id={@action_point.id}
@@ -1140,11 +1349,24 @@ defmodule ActionPointsWeb.ReviewLive do
   # Point's Blockers and promotes its Subtasks, so the order itself can change
   # underneath the decision that caused it.
   defp set_status(socket, id, status) do
-    id
-    |> Meetings.get_action_point!(socket.assigns.extraction.session_token)
-    |> Meetings.set_action_point_status(status)
+    action_point = Meetings.get_action_point!(id, socket.assigns.extraction.session_token)
 
-    refresh(socket)
+    if decidable?(action_point) do
+      Meetings.set_action_point_status(action_point, status)
+      refresh(socket)
+    else
+      socket
+    end
+  end
+
+  # The walk's ordering, enforced where a disabled attribute cannot be. Asked
+  # of the row rather than of the screen that asked, so a stale tab or a forged
+  # event finds no decision available either — and asked of both directions of
+  # the one rule, since a screen that shows several Action Points at once can
+  # be clicked out of order in more than one way.
+  defp decidable?(action_point) do
+    is_nil(undecided_blocker(action_point)) and
+      Enum.all?(action_point.subtasks, &(&1.status != :undecided))
   end
 
   defp set_assignee(socket, id, sink_user) do
@@ -1256,11 +1478,38 @@ defmodule ActionPointsWeb.ReviewLive do
   # and the rest — behind it, in the same order — is what has been.
   defp assign_walk(socket, action_points) do
     ordered = DependencyOrder.sort(action_points)
+    {step, subtasks} = family(Enum.find(ordered, &(&1.status == :undecided)), ordered)
 
     socket
-    |> assign(:step, Enum.find(ordered, &(&1.status == :undecided)))
+    |> assign(:step, step)
+    |> assign(:step_subtasks, subtasks)
     |> assign(:decided, Enum.reject(ordered, &(&1.status == :undecided)))
   end
+
+  # The family the walk has arrived at: the Action Point that owns the screen
+  # and the Subtasks decided beneath it.
+  #
+  # Dependency Order reaches a family through its children, so the parent is
+  # pulled onto the screen by the first of them — a Subtask is never shown
+  # without the whole it is part of. An Action Point with no nesting on either
+  # side is its own step and the family furniture never appears.
+  #
+  # The parent is looked up in the ordered list rather than through the
+  # association, so it is the same struct the walk holds, preloaded alike.
+  defp family(nil, _ordered), do: {nil, []}
+
+  defp family(%{parent_id: nil} = action_point, ordered) do
+    {action_point, subtasks_of(action_point, ordered)}
+  end
+
+  defp family(%{parent_id: parent_id} = action_point, ordered) do
+    case Enum.find(ordered, &(&1.id == parent_id and &1.status == :undecided)) do
+      nil -> {action_point, []}
+      parent -> {parent, subtasks_of(parent, ordered)}
+    end
+  end
+
+  defp subtasks_of(parent, ordered), do: Enum.filter(ordered, &(&1.parent_id == parent.id))
 
   # How many Action Points are carrying the flag — what decides whether the notice
   # explaining it is worth showing at all.
