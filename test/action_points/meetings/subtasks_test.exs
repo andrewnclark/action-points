@@ -124,13 +124,16 @@ defmodule ActionPoints.Meetings.SubtasksTest do
 
   describe "rejecting a parent" do
     test "promotes its Subtasks rather than orphaning them" do
-      [parent, _child_one, _child_two] =
+      [parent, child_one, child_two] =
         extract([
           ap("Revamp onboarding"),
           ap("Rewrite the onboarding copy", %{parent: 1}),
           ap("Build the new flow", %{parent: 1})
         ])
 
+      # The children are decided before the parent, as the walk decides them
+      # (ADR-0010) — the promotion has to leave those decisions standing.
+      accept_action_points([child_one, child_two])
       Meetings.set_action_point_status(parent, :rejected)
 
       [parent, child_one, child_two] =
@@ -162,6 +165,7 @@ defmodule ActionPoints.Meetings.SubtasksTest do
     test "rejecting a childless Action Point stays a plain status change" do
       [first, second] = extract([ap("Revamp onboarding"), ap("Book the offsite venue")])
 
+      Meetings.set_action_point_status(first, :accepted)
       rejected = Meetings.set_action_point_status(second, :rejected)
 
       assert rejected.status == :rejected
@@ -199,10 +203,13 @@ defmodule ActionPoints.Meetings.SubtasksTest do
     # Review counts as pushable.
     test "nesting leaves the pushable count untouched" do
       [parent | _] =
+        action_points =
         extract([
           ap("Revamp onboarding"),
           ap("Rewrite the onboarding copy", %{parent: 1})
         ])
+
+      accept_action_points(action_points)
 
       assert Meetings.count_pushable_action_points(parent.extraction_id) == 2
     end

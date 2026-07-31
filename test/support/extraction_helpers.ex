@@ -60,4 +60,18 @@ defmodule ActionPoints.ExtractionHelpers do
         eventually(fun, tries - 1)
       end
   end
+
+  @doc """
+  Accepts every one of an Extraction's Action Points, leaving the Review where
+  the old `:accepted` default used to leave it.
+
+  Since ADR-0010 an Action Point starts `:undecided`, so a test about what
+  happens *after* Review — a Push, a pushed relation, a tally, a screen that
+  only makes sense for an accepted Action Point — has to state the decisions it
+  stands on instead of inheriting them from a default. Returns the Action
+  Points as stored, in the order given.
+  """
+  def accept_action_points(action_points) when is_list(action_points) do
+    Enum.map(action_points, &ActionPoints.Meetings.set_action_point_status(&1, :accepted))
+  end
 end

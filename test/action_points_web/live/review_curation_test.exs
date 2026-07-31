@@ -30,7 +30,7 @@ defmodule ActionPointsWeb.ReviewCurationTest do
   # Creates a succeeded Extraction owned by the conn's anonymous session and
   # opens its Review screen. The Extraction runs synchronously here so the
   # curation tests start from a settled Review, not a spinner.
-  defp open_review(conn, result \\ @extractor_result) do
+  defp open_review(conn, result \\ @extractor_result, opts \\ []) do
     stub_extractor(result)
 
     conn = get(conn, ~p"/")
@@ -40,7 +40,15 @@ defmodule ActionPointsWeb.ReviewCurationTest do
       Meetings.create_extraction(nil, session_token, %{"transcript_text" => @transcript})
 
     Meetings.run_extraction(extraction)
-    action_points = Meetings.get_extraction!(extraction.id, session_token).action_points
+    extraction = Meetings.get_extraction!(extraction.id, session_token)
+
+    # The Review these tests drive is one that has been walked: since ADR-0010
+    # nothing arrives accepted, and this screen is about what follows. Pass
+    # `decided: false` for the state a visitor actually lands on.
+    action_points =
+      if Keyword.get(opts, :decided, true),
+        do: accept_action_points(extraction.action_points),
+        else: extraction.action_points
 
     path = ~p"/review/#{extraction}"
     {:ok, review, _html} = live(conn, path)
@@ -54,7 +62,7 @@ defmodule ActionPointsWeb.ReviewCurationTest do
     review |> element("##{dom_id(action_point)}-edit") |> render_click()
   end
 
-  test "Action Points default to accepted and the Push button shows the count", %{conn: conn} do
+  test "accepted Action Points show as accepted and the Push button counts them", %{conn: conn} do
     %{review: review} = open_review(conn)
 
     assert has_element?(
@@ -88,6 +96,30 @@ defmodule ActionPointsWeb.ReviewCurationTest do
 
     assert has_element?(review, "#review-toolbar", "1 accepted")
     assert has_element?(review, "#review-toolbar", "1 rejected")
+  end
+
+  # What a visitor now lands on, pinned deliberately. Since ADR-0010 nothing
+  # arrives accepted, so this list screen opens with nothing to Push and an
+  # Accept on every card. The walk that makes that state navigable is #106's;
+  # until it lands this test is what stops the intermediate state being
+  # silently wrong rather than merely unfinished.
+  test "a Review nobody has walked yet tallies nothing accepted and offers no Push",
+       %{conn: conn} do
+    %{review: review} = open_review(conn, @extractor_result, decided: false)
+
+    assert has_element?(review, "#action-points li[data-status=undecided]")
+    assert has_element?(review, "#review-toolbar", "0 accepted")
+    assert has_element?(review, "#review-toolbar", "2 not yet decided")
+    refute has_element?(review, "#review-toolbar", "rejected")
+
+    # The promise still shows: it is what a first-time visitor most needs.
+    assert has_element?(
+             review,
+             "#review-toolbar",
+             "Nothing is created in Linear until you Push"
+           )
+
+    assert has_element?(review, "#push-button[disabled]")
   end
 
   test "an Extraction that finds nothing lands on a designed empty Review", %{conn: conn} do

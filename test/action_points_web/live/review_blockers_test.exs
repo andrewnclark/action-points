@@ -36,7 +36,11 @@ defmodule ActionPointsWeb.ReviewBlockersTest do
       Meetings.create_extraction(nil, session_token, %{"transcript_text" => @transcript})
 
     Meetings.run_extraction(extraction)
-    action_points = Meetings.get_extraction!(extraction.id, session_token).action_points
+    extraction = Meetings.get_extraction!(extraction.id, session_token)
+
+    # The Review these tests drive is one that has been walked: since ADR-0010
+    # nothing arrives accepted, and this screen is about what follows.
+    action_points = accept_action_points(extraction.action_points)
 
     path = ~p"/review/#{extraction}"
     {:ok, review, _html} = live(conn, path)

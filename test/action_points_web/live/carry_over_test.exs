@@ -61,7 +61,19 @@ defmodule ActionPointsWeb.CarryOverTest do
 
     {:error, {:live_redirect, %{to: review_path}}} = result
     "/review/" <> extraction_id = review_path
+
+    # Since ADR-0010 the Demo's Action Points arrive undecided. What carries
+    # over through signup is a Review somebody decided, so decide it here —
+    # on the screen, so the mounted LiveView stays in step with the rows.
+    for action_point <- demo_action_points(conn, extraction_id) do
+      review |> element("#action_points-#{action_point.id}-accept") |> render_click()
+    end
+
     %{conn: conn, review: review, review_path: review_path, extraction_id: extraction_id}
+  end
+
+  defp demo_action_points(conn, extraction_id) do
+    Meetings.get_extraction!(extraction_id, get_session(conn, :anon_session_token)).action_points
   end
 
   # Registers through the real registration screen on the same conn, then logs

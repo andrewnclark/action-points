@@ -132,13 +132,17 @@ defmodule ActionPointsWeb.ReviewLive do
             >
               <span class="inline-flex items-center gap-1.5">
                 <span class="size-1.5 rounded-full bg-primary" aria-hidden="true"></span>
-                {@action_point_count - @rejected_count} accepted
+                {@accepted_count} accepted
+              </span>
+              <span :if={@undecided_count > 0} class="inline-flex items-center gap-1.5">
+                <span class="size-1.5 rounded-full bg-base-content/25" aria-hidden="true"></span>
+                {@undecided_count} not yet decided
               </span>
               <span :if={@rejected_count > 0} class="inline-flex items-center gap-1.5">
                 <span class="size-1.5 rounded-full bg-base-content/40" aria-hidden="true"></span>
                 {@rejected_count} rejected
               </span>
-              <span :if={@pushable_count > 0} class="ml-auto">
+              <span :if={@pushable_count > 0 or @undecided_count > 0} class="ml-auto">
                 Nothing is created in Linear until you Push.
               </span>
             </div>
@@ -400,9 +404,16 @@ defmodule ActionPointsWeb.ReviewLive do
                             phx-click="accept"
                             phx-value-id={action_point.id}
                             class="btn btn-outline btn-xs"
-                            title="Accept this Action Point again"
+                            title="Accept this Action Point"
                           >
-                            <.icon name="hero-arrow-uturn-left-micro" class="size-3.5" /> Accept
+                            <.icon
+                              name={
+                                if action_point.status == :rejected,
+                                  do: "hero-arrow-uturn-left-micro",
+                                  else: "hero-check-micro"
+                              }
+                              class="size-3.5"
+                            /> Accept
                           </button>
                       <% end %>
                     </div>
@@ -1142,6 +1153,10 @@ defmodule ActionPointsWeb.ReviewLive do
     socket
     |> assign(:action_point_count, length(action_points))
     |> assign(:pushable_count, Enum.count(action_points, &Meetings.ActionPoint.pushable?/1))
+    # Counted rather than inferred from the total: since ADR-0010 an Action
+    # Point starts undecided, so "not rejected" no longer means accepted.
+    |> assign(:accepted_count, Enum.count(action_points, &(&1.status == :accepted)))
+    |> assign(:undecided_count, Enum.count(action_points, &(&1.status == :undecided)))
     |> assign(:rejected_count, Enum.count(action_points, &(&1.status == :rejected)))
     |> assign(:has_blockers, Enum.any?(action_points, &(&1.blockers != [])))
     |> assign(:unpushed_relations_count, unpushed_relations_count(action_points))
